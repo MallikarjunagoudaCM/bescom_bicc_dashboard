@@ -1,0 +1,222 @@
+/* ============================================================
+   06_landing.css  —  B-005: Landing page + cards navigation
+   Loaded after existing 01–05 assets. Overrides tab chrome only.
+   Responsive: mobile-first (375px base → 768px → 1024px+)
+   ============================================================ */
+
+/* ── 1. Hide old tab strip ─────────────────────────────────── */
+.bicc-tabs .nav-tabs            { display: none !important; }
+.bicc-tabs > .tab-content       { padding-top: 0 !important; }
+
+/* ── 2. Header band overrides ──────────────────────────────── */
+.bicc-header .container-fluid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-block: 0.75rem;
+}
+
+/* Stack brand + date picker vertically on mobile */
+.bicc-header .header-brand      { flex: 1 1 auto; }
+.bicc-header .header-date-zone  {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  align-items: flex-start;
+}
+
+/* Side-by-side from 768 px up */
+@media (min-width: 768px) {
+  .bicc-header .container-fluid {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+  .bicc-header .header-date-zone {
+    width: auto;
+    align-items: flex-end;
+    flex-shrink: 0;
+  }
+}
+
+.header-date-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.65);
+  margin-bottom: 2px;
+}
+
+.date-range-note {
+  font-size: 0.68rem;
+  color: rgba(255,255,255,0.45);
+  margin-top: 2px;
+}
+
+/* ── 3. Landing hero section ───────────────────────────────── */
+.landing-hero {
+  background: linear-gradient(135deg, #0a2540 0%, #0e3460 60%, #0a2540 100%);
+  color: #fff;
+  padding: 2.5rem 1rem 2rem;
+  text-align: center;
+}
+
+.landing-hero__title {
+  font-size: clamp(1.25rem, 4vw, 2rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+}
+
+.landing-hero__sub {
+  font-size: clamp(0.8rem, 2vw, 1rem);
+  color: rgba(255,255,255,0.65);
+  margin: 0 auto 1.75rem;
+  max-width: 56ch;
+}
+
+/* ── 4. Nav cards grid ─────────────────────────────────────── */
+.landing-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: 1rem;
+  padding: 1.5rem 1rem 2rem;
+  max-width: 1100px;
+  margin-inline: auto;
+}
+
+/* Individual nav card */
+.nav-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.5rem 1.25rem;
+  cursor: pointer;
+  text-align: left;
+  transition: box-shadow 180ms ease, transform 160ms ease, border-color 180ms ease;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-height: 140px;
+  /* Touch target: min 44px guaranteed by min-height */
+}
+
+.nav-card:hover,
+.nav-card:focus-visible {
+  box-shadow: 0 8px 28px rgba(0,152,212,0.15);
+  border-color: #0098d4;
+  transform: translateY(-2px);
+  outline: none;
+}
+
+.nav-card:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(0,152,212,0.1);
+}
+
+.nav-card__icon {
+  font-size: 1.75rem;
+  line-height: 1;
+}
+
+.nav-card__title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0a2540;
+  margin: 0;
+}
+
+.nav-card__desc {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin: 0;
+  flex: 1;
+}
+
+.nav-card__arrow {
+  font-size: 0.85rem;
+  color: #0098d4;
+  font-weight: 600;
+  margin-top: auto;
+  align-self: flex-end;
+}
+
+/* Active (currently open) card highlight */
+.nav-card.active {
+  border-color: #0098d4;
+  background: #f0f9ff;
+}
+
+/* ── 5. Back button strip ──────────────────────────────────── */
+.back-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1rem;
+  background: #f0f9ff;
+  border-bottom: 1px solid #cde4f5;
+  font-size: 0.82rem;
+  color: #0a2540;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.back-strip:hover { background: #dbeeff; }
+.back-strip__icon { font-size: 1rem; }
+.back-strip__label { font-weight: 600; }
+.back-strip__section { color: #0098d4; }
+
+/* ── 6. Content pane fade-in ───────────────────────────────── */
+.section-pane {
+  animation: pane-in 200ms ease both;
+}
+
+@keyframes pane-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── 7. Responsive: single col stacking tweaks ─────────────── */
+@media (max-width: 575px) {
+  .landing-cards          { padding: 1rem 0.75rem; gap: 0.75rem; }
+  .nav-card               { min-height: 120px; padding: 1.1rem 1rem; }
+  .landing-hero           { padding: 2rem 0.75rem 1.5rem; }
+}
+
+@media (min-width: 768px) {
+  .landing-cards          { padding: 2rem 1.5rem 2.5rem; gap: 1.25rem; }
+}
+
+@media (min-width: 1024px) {
+  .landing-hero           { padding: 3rem 2rem 2.5rem; }
+  .landing-cards          { padding: 2.5rem 2rem 3rem; gap: 1.5rem; }
+}
+
+/* ── 8. Date picker alignment tweak in header ──────────────── */
+.DateInput_input {
+  font-size: 0.8rem !important;
+}
+
+.DateRangePickerInput {
+  background: rgba(255,255,255,0.12) !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(255,255,255,0.2) !important;
+}
+
+.DateInput {
+  background: transparent !important;
+}
+
+.DateInput_input__focused {
+  border-bottom-color: #00c0ef !important;
+}
+
+/* ── 9. Reduced motion ─────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .nav-card,
+  .section-pane,
+  .back-strip { transition: none !important; animation: none !important; }
+}

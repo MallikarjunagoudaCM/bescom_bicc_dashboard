@@ -1,0 +1,49 @@
+/* ==========================================================================
+   01_variables.css — BESCOM BICC Design Tokens
+   Single source of truth for all colours, radii, shadows, transitions.
+   ========================================================================== */
+
+:root {
+  /* ── Brand palette ────────────────────────────────────────────── */
+  --bescom-navy:        #1a3a6b;
+  --bescom-blue:        #0072bc;
+  --bescom-blue-strong: #005a96;
+  --bescom-blue-soft:   #eaf4fb;
+  --bescom-cyan:        #00c0ef;
+  --bescom-red:         #e8382b;
+  --bescom-gold:        #f5a623;
+  --bescom-green:       #2e7d32;
+  --bescom-danger:      #c94b4b;
+  --bescom-warning:     #e09000;
+  --bescom-success:     #2f8f5b;
+
+  /* ── Surface / border / text ──────────────────────────────────── */
+  --bescom-bg:          #f5f8fc;
+  --bescom-surface:     #ffffff;
+  --bescom-surface-2:   #f8fbfe;
+  --bescom-border:      #d0daea;
+  --bescom-divider:     #e5eef5;
+  --bescom-ink:         #1c2d44;
+  --bescom-muted:       #5a6f8a;
+
+  /* Tinted backgrounds for pill/badge */
+  --bescom-red-bg:      #fff0ef;
+  --bescom-gold-bg:     #fff9ec;
+  --bescom-blue-bg:     #eef3fb;
+
+  /* ── Radius ───────────────────────────────────────────────────── */
+  --radius-sm:   8px;
+  --radius-md:   10px;
+  --radius-lg:   16px;
+  --radius-card: 10px;
+
+  /* ── Shadows ──────────────────────────────────────────────────── */
+  --shadow-sm:   0 1px 4px rgba(26, 58, 107, 0.07);
+  --shadow-md:   0 4px 16px rgba(26, 58, 107, 0.11);
+  --shadow-lg:   0 8px 32px rgba(26, 58, 107, 0.16);
+  --shadow-card: 0 2px 10px rgba(26, 58, 107, 0.09);
+  --shadow-hover:0 6px 22px rgba(26, 58, 107, 0.15);
+
+  /* ── Transitions ──────────────────────────────────────────────── */
+  --transition:  180ms cubic-bezier(0.16, 1, 0.3, 1);
+}

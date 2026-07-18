@@ -1,0 +1,193 @@
+/* ==========================================================================
+   04_table.css — BESCOM BICC DataTable & Toolbar
+   Table toolbar, Top-N selector, export button, column-filter row,
+   Dash DataTable overrides, pagination.
+   ========================================================================== */
+
+/* ── Table wrapper ───────────────────────────────────────────────────────── */
+.bicc-table-wrapper { overflow: hidden; }
+
+.dash-spreadsheet-container,
+.dash-table-container { border: none !important; }
+
+/* ── Table toolbar ───────────────────────────────────────────────────────── */
+.table-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--bescom-divider);
+  background: linear-gradient(180deg, #f9fcfe 0%, #f2f8fc 100%);
+}
+
+.table-toolbar-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--bescom-navy);
+}
+
+.row-count-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--bescom-blue);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+/* ── Top-N selector ──────────────────────────────────────────────────────── */
+.topn-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--bescom-border);
+  border-radius: 999px;
+  background: #fff;
+}
+
+.topn-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--bescom-muted);
+}
+
+.topn-input {
+  width: 64px;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 1px solid var(--bescom-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--bescom-navy);
+  text-align: center;
+  font-weight: 700;
+}
+
+.topn-input:focus,
+.dt-filter-input:focus {
+  outline: none;
+  border-color: var(--bescom-blue);
+  box-shadow: 0 0 0 3px rgba(0,114,188,.12);
+}
+
+/* ── Column filter row ───────────────────────────────────────────────────── */
+.dt-filter-row {
+  padding: 12px 14px 10px;
+  border: 1px solid var(--bescom-border);
+  border-bottom: none;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+  background: linear-gradient(180deg, #f2f8fd 0%, #f8fbfe 100%);
+  overflow-x: auto;
+}
+
+.dt-filter-inner {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+  min-width: max-content;
+}
+
+.dt-filter-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 150px;
+  max-width: 240px;
+}
+
+.dt-filter-col-label {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--bescom-muted);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dt-filter-dropdown,
+.dt-filter-input { min-height: 34px; }
+
+.dt-filter-input {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--bescom-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--bescom-ink);
+}
+
+/* Numeric range inputs */
+.dt-filter-num-wrap { display: flex; gap: 4px; }
+
+.dt-filter-input-half {
+  width: 80px;
+  padding: 5px 8px;
+  font-size: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  color: #0a2540;
+  background: #fff;
+}
+
+.dt-filter-input-half:focus {
+  outline: none;
+  border-color: var(--bescom-blue);
+  box-shadow: 0 0 0 2px rgba(0,152,212,.15);
+}
+
+/* Remove number-input spinners */
+.dt-filter-input-half::-webkit-outer-spin-button,
+.dt-filter-input-half::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.dt-filter-input-half[type="number"]             { -moz-appearance: textfield; }
+
+/* ── DataTable header & cells ────────────────────────────────────────────── */
+.dash-spreadsheet-container .dash-spreadsheet-inner th {
+  background: #edf6fc !important;
+  color: var(--bescom-navy) !important;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  border-bottom: 2px solid var(--bescom-blue) !important;
+}
+
+.dash-spreadsheet-container .dash-spreadsheet-inner td {
+  font-size: 13px !important;
+  color: var(--bescom-ink) !important;
+}
+
+.dash-spreadsheet-container .dash-spreadsheet-inner th:hover {
+  background: #dfedf8 !important;
+}
+
+.dash-spreadsheet-container .column-header--sort i.sort-arrow {
+  color: var(--bescom-blue) !important;
+}
+
+/* ── Pagination ──────────────────────────────────────────────────────────── */
+.dash-spreadsheet-container .previous-page,
+.dash-spreadsheet-container .next-page,
+.dash-spreadsheet-container .last-page,
+.dash-spreadsheet-container .first-page {
+  color: var(--bescom-blue) !important;
+  border-color: var(--bescom-border) !important;
+}
+
+.dash-spreadsheet-container .current-page input {
+  border-color: var(--bescom-blue) !important;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .table-toolbar { gap: 6px; }
+  .row-count-badge { order: 3; }
+  .topn-wrap { flex-wrap: wrap; border-radius: 12px; }
+  .dt-filter-cell { min-width: 130px; }
+}

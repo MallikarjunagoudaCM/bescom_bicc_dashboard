@@ -1,0 +1,405 @@
+/* ==========================================================================
+   05_admin.css — BESCOM BICC Admin Tab
+   Login panel, upload zone, upload summary, DB stats, rollback cards,
+   confirmation modal, result boxes.
+   ========================================================================== */
+
+/* ── Admin tab wrapper ───────────────────────────────────────────────────── */
+.admin-tab { padding: 0; }
+
+.admin-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+
+/* ── Login panel ─────────────────────────────────────────────────────────── */
+.admin-login-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  background: var(--bescom-bg);
+}
+
+.admin-login-card {
+  background: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 24px rgba(11,35,65,.12);
+  padding: 2.5rem 3rem;
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border-top: 4px solid var(--bescom-blue);
+}
+
+.login-title {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: var(--bescom-navy);
+  margin-bottom: .25rem;
+  text-align: center;
+}
+
+.login-subtitle {
+  font-size: .82rem;
+  color: var(--bescom-muted);
+  text-align: center;
+  margin-bottom: .25rem;
+}
+
+.login-input {
+  width: 100%;
+  padding: .65rem .9rem;
+  border: 1px solid var(--bescom-border);
+  border-radius: var(--radius-sm);
+  font-size: .95rem;
+  color: var(--bescom-ink);
+  transition: border-color .2s, box-shadow .2s;
+  box-sizing: border-box;
+}
+
+.login-input:focus {
+  outline: none;
+  border-color: var(--bescom-blue);
+  box-shadow: 0 0 0 3px rgba(0,114,188,.14);
+}
+
+.login-btn   { width: 100%; margin-top: .25rem; }
+
+.login-error {
+  color: var(--bescom-danger);
+  font-size: .85rem;
+  text-align: center;
+  min-height: 1.2em;
+}
+
+/* ── Admin console ───────────────────────────────────────────────────────── */
+.admin-console { padding: 1.5rem; }
+
+.btn-logout {
+  padding: .4rem 1rem;
+  font-size: .85rem;
+  background: transparent;
+  border: 1px solid var(--bescom-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: var(--bescom-muted);
+  transition: all .2s;
+}
+
+.btn-logout:hover {
+  background: var(--bescom-blue-soft);
+  border-color: var(--bescom-blue);
+  color: var(--bescom-navy);
+}
+
+/* ── DB stats alert ──────────────────────────────────────────────────────── */
+.db-stats-alert {
+  background: #eef6fb;
+  border-left: 4px solid var(--bescom-blue);
+  border-radius: var(--radius-sm);
+  padding: .75rem 1.2rem;
+  font-size: .88rem;
+  color: var(--bescom-ink);
+  margin-bottom: 1.5rem;
+  line-height: 1.5;
+}
+
+/* ── Admin section card ──────────────────────────────────────────────────── */
+.admin-section {
+  background: #fff;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 1.5rem;
+  margin-bottom: 1.75rem;
+  border: 1px solid var(--bescom-border);
+}
+
+.admin-section-title {
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--bescom-navy);
+  margin-top: 0;
+  margin-bottom: .4rem;
+  border-bottom: 2px solid var(--bescom-divider);
+  padding-bottom: .5rem;
+}
+
+.admin-section-desc {
+  font-size: .88rem;
+  color: var(--bescom-muted);
+  margin-bottom: 1rem;
+}
+
+/* ── Upload zone ─────────────────────────────────────────────────────────── */
+.upload-dropzone {
+  display: block;
+  width: 100%;
+  min-height: 120px;
+  border: 2px dashed var(--bescom-border);
+  border-radius: var(--radius-sm);
+  background: var(--bescom-surface-2);
+  cursor: pointer;
+  transition: border-color .2s, background .2s;
+  box-sizing: border-box;
+}
+
+.upload-dropzone:hover,
+.upload-dropzone:focus {
+  border-color: var(--bescom-blue);
+  background: var(--bescom-blue-soft);
+}
+
+.upload-drop-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  pointer-events: none;
+  user-select: none;
+  padding: 1.25rem;
+  gap: .25rem;
+}
+
+.upload-icon     { font-size: 2rem; line-height: 1; }
+.upload-title    { font-size: 1rem; font-weight: 600; color: var(--bescom-muted); margin: 0; }
+.upload-subtitle { font-size: .8rem; color: #9ab0c4; margin: 0; }
+
+/* ── Upload result boxes ─────────────────────────────────────────────────── */
+.upload-result   { margin-top: 1.25rem; }
+
+.upload-success-box,
+.upload-error-box {
+  border-radius: var(--radius-sm);
+  padding: 1rem 1.25rem;
+  margin-top: .75rem;
+}
+
+.upload-success-box { background: #e8f5ee; border-left: 4px solid var(--bescom-success); color: #1a4a32; }
+.upload-error-box   { background: #fdeaea; border-left: 4px solid var(--bescom-danger);  color: #6b1c1c; }
+
+.upload-error-pre {
+  font-family: monospace;
+  font-size: .82rem;
+  white-space: pre-wrap;
+  margin: .5rem 0 0;
+}
+
+.upload-summary-table {
+  width: 100%;
+  margin-top: .75rem;
+  border-collapse: collapse;
+  font-size: .88rem;
+}
+
+.upload-summary-table th,
+.upload-summary-table td {
+  text-align: left;
+  padding: .35rem .7rem;
+  border-bottom: 1px solid var(--bescom-divider);
+}
+
+.upload-summary-table th {
+  font-weight: 700;
+  background: var(--bescom-blue-soft);
+  color: var(--bescom-navy);
+}
+
+/* ── Rollback manager ────────────────────────────────────────────────────── */
+.rollback-cards-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: .75rem;
+}
+
+.rollback-card {
+  border: 1px solid var(--bescom-border);
+  border-radius: var(--radius-sm);
+  background: var(--bescom-surface-2);
+  padding: 0;
+  overflow: hidden;
+  transition: box-shadow .2s;
+}
+
+.rollback-card:hover { box-shadow: 0 4px 16px rgba(0,114,188,.12); }
+
+.rollback-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(90deg, var(--bescom-blue-soft) 0%, #ddf0fb 100%);
+  padding: .6rem 1rem;
+  border-bottom: 1px solid var(--bescom-border);
+}
+
+.rollback-card-id {
+  font-weight: 800;
+  font-size: .92rem;
+  color: var(--bescom-blue);
+}
+
+.rollback-card-ts {
+  font-size: .82rem;
+  color: var(--bescom-muted);
+}
+
+.rollback-card-body {
+  padding: .8rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+}
+
+.rollback-meta-row {
+  font-size: .88rem;
+  color: var(--bescom-ink);
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: .15rem;
+}
+
+.rollback-label  { font-weight: 700; color: var(--bescom-muted); flex-shrink: 0; }
+.rollback-value  { color: var(--bescom-ink); }
+.rollback-value.filename { font-family: monospace; font-size: .82rem; word-break: break-all; }
+
+.btn-rollback {
+  display: block;
+  width: 100%;
+  padding: .6rem 1rem;
+  margin: 0;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--bescom-divider);
+  color: var(--bescom-danger);
+  font-size: .88rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+  transition: background .18s, color .18s;
+  border-radius: 0;
+}
+
+.btn-rollback:hover { background: #fdeaea; color: #8a1c1c; }
+
+/* ── Rollback empty state ────────────────────────────────────────────────── */
+.rollback-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  gap: .5rem;
+  background: var(--bescom-surface-2);
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--bescom-border);
+}
+
+.rollback-empty-icon { font-size: 2rem; }
+.rollback-empty-text { color: var(--bescom-muted); font-size: .9rem; text-align: center; margin: 0; }
+
+/* ── Rollback confirmation modal ─────────────────────────────────────────── */
+.rollback-modal .modal-header { background: #fdeaea; border-bottom: 1px solid #f5cccc; }
+
+.rollback-modal .modal-title {
+  font-weight: 800;
+  color: var(--bescom-danger);
+  font-size: 1.05rem;
+}
+
+.rollback-modal-content { display: flex; flex-direction: column; gap: .9rem; }
+
+.rollback-modal-warning { font-size: .92rem; color: var(--bescom-ink); margin: 0; }
+
+.rollback-modal-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+
+.rollback-modal-table td {
+  padding: .4rem .75rem;
+  border-bottom: 1px solid var(--bescom-divider);
+}
+
+.rollback-modal-table td:first-child { font-weight: 700; color: var(--bescom-muted); width: 45%; }
+
+.modal-val        { color: var(--bescom-ink); }
+.modal-val.danger { color: var(--bescom-danger); font-size: 1rem; }
+
+.rollback-modal-note {
+  font-size: .82rem;
+  color: var(--bescom-danger);
+  margin: 0;
+  background: #fdeaea;
+  border-radius: 6px;
+  padding: .5rem .75rem;
+  border-left: 3px solid #e8a0a0;
+}
+
+/* ── Rollback result boxes ───────────────────────────────────────────────── */
+.rollback-result { margin-top: 1rem; }
+
+.rollback-success-box {
+  background: #e8f5ee;
+  border-left: 4px solid var(--bescom-success);
+  border-radius: var(--radius-sm);
+  padding: 1rem 1.25rem;
+  color: #1a4a32;
+}
+
+.rollback-error-box {
+  background: #fdeaea;
+  border-left: 4px solid var(--bescom-danger);
+  border-radius: var(--radius-sm);
+  padding: 1rem 1.25rem;
+  color: #6b1c1c;
+}
+
+.rollback-error-msg { font-size: .88rem; margin: .4rem 0 0; }
+
+/* ── Shared admin buttons ────────────────────────────────────────────────── */
+.btn-primary-admin {
+  padding: .55rem 1.25rem;
+  background: linear-gradient(180deg, var(--bescom-blue) 0%, var(--bescom-blue-strong) 100%);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: .92rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .2s;
+}
+
+.btn-primary-admin:hover {
+  background: linear-gradient(180deg, #0a7cc6 0%, #045285 100%);
+}
+
+.btn-secondary-admin {
+  padding: .45rem 1rem;
+  background: transparent;
+  color: var(--bescom-muted);
+  border: 1px solid var(--bescom-border);
+  border-radius: var(--radius-sm);
+  font-size: .88rem;
+  cursor: pointer;
+  transition: all .2s;
+}
+
+.btn-secondary-admin:hover {
+  background: var(--bescom-blue-soft);
+  border-color: var(--bescom-blue);
+  color: var(--bescom-navy);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .admin-console  { padding: 1rem; }
+  .admin-section  { padding: 1rem; }
+  .admin-login-card { padding: 2rem 1.5rem; margin: 1rem; }
+  .rollback-card-header { flex-direction: column; align-items: flex-start; gap: .2rem; }
+  .rollback-modal-table td { display: block; width: 100%; }
+  .rollback-modal-table td:first-child { width: 100%; border-bottom: none; padding-bottom: 0; font-size: .8rem; }
+}

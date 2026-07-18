@@ -1,0 +1,208 @@
+/* ==========================================================================
+   02_base.css — BESCOM BICC Reset, Body, Header, Tabs, Page Text
+   ========================================================================== */
+
+/* ── Box model reset ─────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  background: linear-gradient(180deg, #f8fbfe 0%, #f4f8fc 100%);
+  color: var(--bescom-ink);
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.container-fluid {
+  padding-left:  20px !important;
+  padding-right: 20px !important;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+.bicc-header {
+  background: linear-gradient(135deg, var(--bescom-navy) 0%, #12345a 70%, #184975 100%) !important;
+  border-bottom: 3px solid var(--bescom-cyan);
+  box-shadow: var(--shadow-md);
+  padding: 0 !important;
+}
+
+.bicc-header .container-fluid {
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.bescom-logo {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+  border-radius: 10px;
+  background: rgba(255,255,255,.96);
+  padding: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.18);
+}
+
+.header-title-block {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.header-title {
+  color: #fff;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  line-height: 1.15;
+}
+
+.header-subtitle {
+  color: #b7d9f0;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: .03em;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+
+.header-date-zone {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.header-date-label {
+  color: #d9ecf8;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.date-range-note {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #dbeafe;
+  opacity: .95;
+}
+
+.date-range-lite { z-index: 9999; }
+
+.date-range-lite .DateInput,
+.date-range-lite .DateInput input {
+  border-radius: 8px !important;
+  border: 1px solid rgba(255,255,255,.18) !important;
+  background: rgba(255,255,255,.96) !important;
+  color: var(--bescom-navy) !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+/* ── Tabs ────────────────────────────────────────────────────────────────── */
+.bicc-tabs .nav-tabs {
+  background: var(--bescom-surface);
+  border-bottom: 1px solid var(--bescom-border);
+  padding: 0 20px;
+  gap: 4px;
+  box-shadow: 0 1px 0 rgba(11,35,65,.04);
+}
+
+.bicc-tabs .nav-link {
+  border: none !important;
+  border-bottom: 3px solid transparent !important;
+  border-radius: 0 !important;
+  padding: 14px 16px 12px !important;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--bescom-muted) !important;
+  background: transparent !important;
+  transition: color 150ms, border-color 150ms, background 150ms;
+}
+
+.bicc-tabs .nav-link:hover {
+  color: var(--bescom-blue) !important;
+  background: linear-gradient(180deg, rgba(0,114,188,.05), rgba(0,114,188,0)) !important;
+}
+
+.bicc-tabs .nav-link.active {
+  color: var(--bescom-navy) !important;
+  border-bottom-color: var(--bescom-blue) !important;
+  background: linear-gradient(180deg, rgba(0,114,188,.08), rgba(0,114,188,0)) !important;
+}
+
+.tab-label-lite { font-weight: 700; }
+
+.tab-pane { padding: 24px 0 36px; }
+
+/* ── Page text ───────────────────────────────────────────────────────────── */
+.page-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--bescom-navy);
+  margin-bottom: 6px;
+  line-height: 1.2;
+}
+
+.page-subtitle {
+  font-size: 13px;
+  color: var(--bescom-muted) !important;
+  margin-bottom: 18px !important;
+  max-width: 72ch;
+}
+
+.section-heading {
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--bescom-divider);
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--bescom-navy);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.breadcrumb-strip {
+  margin-bottom: 18px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid #d7e7f3;
+  background: linear-gradient(90deg, #eef6fc 0%, #f7fbfe 100%);
+  color: var(--bescom-ink);
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+@media (max-width: 992px) {
+  .bicc-header .container-fluid {
+    min-height: auto;
+    padding-top: 12px !important;
+    padding-bottom: 12px !important;
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .header-date-zone { width: 100%; justify-content: flex-start; }
+}
+
+@media (max-width: 768px) {
+  .container-fluid { padding-left: 14px !important; padding-right: 14px !important; }
+  .tab-pane { padding-top: 18px; }
+  .page-title { font-size: 18px; }
+}

@@ -1,0 +1,19 @@
+# Byte-compiled
+__pycache__/
+*.pyc
+
+# Data & DB
+*.db
+*.xlsx
+!assets/*.xlsx
+
+# Env / secrets
+.env
+config_local.py
+
+# OS/editor
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
