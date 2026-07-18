@@ -6,7 +6,7 @@ outage monitoring dashboard for BESCOM BICC zones.
 ## Run
 ```
 pip install -r requirements.txt
-python app_working.py
+python app.py
 ```
 App serves on the HOST/PORT configured in `config.py`.
 
