@@ -14,7 +14,7 @@ import sqlite3, pandas as pd
 import time
 from pathlib import Path
 import threading
-from config import DB_PATH
+from config import DB_PATH, TOTAL_CUSTOMERS
 DB = Path(DB_PATH)
 
 import logging
@@ -604,7 +604,7 @@ def get_division_saifi_saidi(cc: str, division=None, date_start=None,
     if date_end:
         extra += " AND ie.eventdate <= ?"
         params.append(date_end)
-    cat_sql, cat_params = feeder_category_subquery(feeder_category)
+    cat_sql, cat_params = _feeder_category_subquery(feeder_category)
     if cat_sql:
         extra += f" AND {cat_sql}"
         params.extend(cat_params)
@@ -633,7 +633,7 @@ def get_division_saifi_saidi(cc: str, division=None, date_start=None,
         ORDER BY saidi DESC
     """
     # control_center param appears twice (subquery + main)
-    with con() as c:
+    with _con() as c:
         return pd.read_sql(sql, c, params=[cc] + params)
 
 # ── Admin helpers ──────────────────────────────────────────────────────────────
@@ -748,3 +748,402 @@ def validate_cache_integrity() -> dict:
                     "diff_removed": sorted(list(set(cached_val) - set(live))),
                 }
     return mismatches
+    
+
+# ============================================================
+# NEW: Trends & Comparison tab support functions
+# Added below existing db.py functions — purely additive.
+# Reuses: con(), _add_cc_filter(), _add_in_filter(),
+#         _feeder_category_subquery(), _level_mode_condition()
+# No existing function signatures or SQL altered.
+# ============================================================
+
+def resolve_customer_base(cc=None, division=None, station=None, feeders=None) -> int:
+        """
+        Single source of truth for the SAIDI/SAIFI denominator.
+        Precedence: feeders > station > division > cc(zone) > global fallback.
+        Used by get_period_comparison(), get_saidi_saifi_trend(), and
+        (optionally) app.py's resolve_saidi_base() for the KPI cards.
+        """
+        fdrs = _normalize_list(feeders)
+        if fdrs:
+            ph = ",".join("?" * len(fdrs))
+            with _con() as c:
+                row = c.execute(
+                    f"SELECT COALESCE(SUM(customers), 0) FROM feeder_customers WHERE feeder IN ({ph})",
+                    fdrs
+                ).fetchone()
+            base = int(row[0]) if row else 0
+            return base if base else TOTAL_CUSTOMERS
+
+        if station:
+            stn = station if isinstance(station, str) else (station[0] if station else None)
+            if stn:
+                with _con() as c:
+                    row = c.execute(
+                        "SELECT COALESCE(SUM(customers), 0) FROM feeder_customers WHERE station = ?",
+                        (stn,)
+                    ).fetchone()
+                base = int(row[0]) if row else 0
+                return base if base else TOTAL_CUSTOMERS
+
+        divs = _normalize_list(division)
+        if divs:
+            ph = ",".join("?" * len(divs))
+            with _con() as c:
+                row = c.execute(
+                    f"SELECT COALESCE(SUM(customers), 0) FROM division_customers WHERE division IN ({ph})",
+                    divs
+                ).fetchone()
+            base = int(row[0]) if row else 0
+            return base if base else TOTAL_CUSTOMERS
+
+        cc_vals = _normalize_list(cc)
+        if cc_vals:
+            ph = ",".join("?" * len(cc_vals))
+            with _con() as c:
+                row = c.execute(
+                    f"""SELECT COALESCE(SUM(dc.customers), 0) FROM division_customers dc
+                        WHERE dc.division IN (
+                            SELECT DISTINCT division FROM station_feeder WHERE control_center IN ({ph})
+                        )""",
+                    cc_vals
+                ).fetchone()
+            base = int(row[0]) if row else 0
+        return base if base else TOTAL_CUSTOMERS
+        with _con() as c:
+                    row = c.execute("SELECT COALESCE(SUM(customers), 0) FROM division_customers").fetchone()
+        base = int(row[0]) if row else 0
+        return base if base else TOTAL_CUSTOMERS
+
+def get_period_comparison(cc=None, division=None, station=None, feeders=None,
+                           feeder_category=None, outage_type=None, agency=None,
+                           period_a_start=None, period_a_end=None,
+                           period_b_start=None, period_b_end=None,
+                           level_mode="both") -> dict:
+    """
+    Returns aggregate totals for two independent date windows (Period A vs B)
+    using the same filter surface as get_interruption_table(), so results are
+    directly comparable to what the Explorer table would show for each window.
+
+    Returns:
+      {
+        "period_a": {"events":.., "total_mins":.., "total_cmi":.., 
+                     "total_customers":.., "saidi":.., "saifi":..},
+        "period_b": {...},
+        "daily_a": pd.DataFrame,   # event_date, total_events, total_duration
+        "daily_b": pd.DataFrame,
+      }
+    """
+    def _customer_base():
+        """Delegates to the module-level resolver so all SAIDI/SAIFI
+        surfaces (Period Comparison, Reliability Trends) agree by construction."""
+        return resolve_customer_base(cc=cc, division=division, station=station, feeders=feeders)
+
+    def _totals(date_start, date_end):
+        filters, params = [], []
+        _add_cc_filter(filters, params, cc, alias="ie")
+        _add_in_filter(filters, params, "ie.division", division)
+        if station:
+            filters.append("ie.station = ?")
+            params.append(station)
+        cat_sql, cat_params = _feeder_category_subquery(feeder_category)
+        if cat_sql:
+            filters.append(cat_sql)
+            params.extend(cat_params)
+        if feeders:
+            placeholders = ",".join(["?"] * len(feeders))
+            filters.append(f"ie.feeder IN ({placeholders})")
+            params.extend(feeders)
+        if outage_type:
+            filters.append("ie.outage_type = ?")
+            params.append(outage_type)
+        if agency:
+            filters.append("ie.agency = ?")
+            params.append(agency)
+        if date_start:
+            filters.append("ie.event_date >= ?")
+            params.append(date_start)
+        if date_end:
+            filters.append("ie.event_date <= ?")
+            params.append(date_end)
+        lvl_cond, _ = _level_mode_condition(level_mode, alias="ie")
+        if lvl_cond:
+            filters.append(lvl_cond)
+        where = "WHERE " + " AND ".join(filters) if filters else ""
+
+        totals_sql = f"""
+            SELECT
+                COUNT(*) AS events,
+                ROUND(COALESCE(SUM(ie.duration_mins), 0), 2) AS total_mins,
+                ROUND(COALESCE(SUM(ie.cmi), 0), 2) AS total_cmi,
+                COALESCE(SUM(ie.customers_affected), 0) AS total_customers
+            FROM interruption_events ie
+            {where}
+        """
+        daily_sql = f"""
+            SELECT ie.event_date AS event_date,
+                   COUNT(*) AS total_events,
+                   ROUND(SUM(ie.duration_mins), 2) AS total_duration
+            FROM interruption_events ie
+            {where}
+            GROUP BY ie.event_date
+            ORDER BY ie.event_date
+        """
+        with _con() as c:
+            row = c.execute(totals_sql, params).fetchone()
+            daily_df = pd.read_sql(daily_sql, c, params=params)
+
+        events = int(row[0] or 0)
+        total_mins = float(row[1] or 0.0)
+        total_cmi = float(row[2] or 0.0)
+        total_customers = int(row[3] or 0)
+
+        customer_base = _customer_base()
+        saidi = round(total_cmi / customer_base, 4) if customer_base else 0.0
+        saifi = round(total_customers / customer_base, 4) if customer_base else 0.0
+
+        return {
+            "events": events,
+            "total_mins": total_mins,
+            "total_cmi": total_cmi,
+            "total_customers": total_customers,
+            "saidi": saidi,          # NEW
+            "saifi": saifi,          # NEW
+        }, daily_df
+
+    totals_a, daily_a = _totals(period_a_start, period_a_end)
+    totals_b, daily_b = _totals(period_b_start, period_b_end)
+
+    return {
+        "period_a": totals_a,
+        "period_b": totals_b,
+        "daily_a": daily_a,
+        "daily_b": daily_b,
+    }
+
+def get_saidi_saifi_trend(cc=None, division=None, station=None, feeders=None,
+                           feeder_category=None, granularity="month",
+                           level_mode="both", date_start=None, date_end=None,
+                           outage_type=None, agency=None) -> pd.DataFrame:
+    """
+    Time-series SAIDI/SAIFI per period bucket (month/quarter), for the
+    Reliability Trends chart and the Division Ranking panel.
+
+    SAIDI = SUM(cmi) / customer_base (per period bucket)
+    SAIFI = SUM(customers_affected) / customer_base   <-- FIXED (was COUNT(*))
+
+    NOTE (SAIFI fix): previously SAIFI numerator was COUNT(*) of interruption
+    rows, which does not match get_period_comparison()'s SAIFI definition
+    (SUM(customers_affected)). Both now use the same IEEE 1366-style
+    customers-interrupted numerator, and both resolve their denominator via
+    the shared resolve_customer_base() helper — so Period Comparison and
+    Reliability Trends will always reconcile for identical filters/dates.
+
+    Returns columns: period, division, events, total_cmi,
+                      total_customers_affected, customers, saidi, saifi
+    """
+    filters, params = [], []
+    _add_cc_filter(filters, params, cc, alias="ie")
+    _add_in_filter(filters, params, "ie.division", division)
+    if station:
+        filters.append("ie.station = ?")
+        params.append(station)
+    if feeders:
+        placeholders = ",".join(["?"] * len(feeders))
+        filters.append(f"ie.feeder IN ({placeholders})")
+        params.extend(feeders)
+    if outage_type:
+        filters.append("ie.outage_type = ?")
+        params.append(outage_type)
+    if agency:
+        filters.append("ie.agency = ?")
+        params.append(agency)
+    cat_sql, cat_params = _feeder_category_subquery(feeder_category)
+    if cat_sql:
+        filters.append(cat_sql)
+        params.extend(cat_params)
+    if date_start:
+        filters.append("ie.event_date >= ?")
+        params.append(date_start)
+    if date_end:
+        filters.append("ie.event_date <= ?")
+        params.append(date_end)
+    lvl_cond, _ = _level_mode_condition(level_mode, alias="ie")
+    if lvl_cond:
+        filters.append(lvl_cond)
+    where = "WHERE " + " AND ".join(filters) if filters else ""
+
+    period_expr = "strftime('%Y-%m', ie.event_date)"
+
+    # Division-level breakdown only when nothing narrower than division is
+    # selected — same precedence as before (feeders/station/cc-only collapse
+    # to a single scoped row; division-level scope keeps per-division rows).
+    if feeders or station or (not division and cc):
+        group_cols = "period"
+        division_col = "'Selected scope' AS division,"
+    else:
+        group_cols = "period, ie.division"
+        division_col = "ie.division AS division,"
+
+    sql = f"""
+        SELECT
+            {period_expr} AS period,
+            {division_col}
+            COUNT(*) AS events,
+            ROUND(COALESCE(SUM(ie.cmi), 0), 2) AS total_cmi,
+            COALESCE(SUM(ie.customers_affected), 0) AS total_customers_affected
+        FROM interruption_events ie
+        {where}
+        GROUP BY {group_cols}
+        ORDER BY period
+    """
+    with _con() as c:
+        df = pd.read_sql(sql, c, params=params)
+
+    if df.empty:
+        df["customers"] = []
+        df["saidi"] = []
+        df["saifi"] = []
+        return df
+
+    # ── Customer-base resolution: single shared resolver (Step 4) ──────────
+    if group_cols == "period, ie.division":
+        # Division-level ranking still needs a per-division denominator.
+        with _con() as c:
+            dc = pd.read_sql("SELECT division, customers FROM division_customers", c)
+        df = df.merge(dc, on="division", how="left")
+        df["customers"] = df["customers"].fillna(0).astype(int)
+    else:
+        scoped_base = resolve_customer_base(cc=cc, division=division,
+                                             station=station, feeders=feeders)
+        df["customers"] = scoped_base
+
+    df["saidi"] = df.apply(
+        lambda r: round(r["total_cmi"] / r["customers"], 4) if r["customers"] else 0.0, axis=1
+    )
+    df["saifi"] = df.apply(
+        lambda r: round(r["total_customers_affected"] / r["customers"], 4) if r["customers"] else 0.0, axis=1
+    )
+
+    if granularity == "quarter":
+        # Re-bucket month periods into quarters in pandas (no SQL change needed).
+        df["period"] = pd.to_datetime(df["period"] + "-01")
+        df["period"] = df["period"].dt.year.astype(str) + "-Q" + df["period"].dt.quarter.astype(str)
+        df = (df.groupby(["period", "division"], as_index=False)
+                .agg(events=("events", "sum"),
+                     total_cmi=("total_cmi", "sum"),
+                     total_customers_affected=("total_customers_affected", "sum"),
+                     customers=("customers", "max")))
+        df["saidi"] = df.apply(
+            lambda r: round(r["total_cmi"] / r["customers"], 4) if r["customers"] else 0.0, axis=1
+        )
+        df["saifi"] = df.apply(
+            lambda r: round(r["total_customers_affected"] / r["customers"], 4) if r["customers"] else 0.0, axis=1
+        )
+
+    return df
+
+def get_repeat_offenders(cc=None, division=None, station=None, feeders=None,
+                          feeder_category=None, min_events=3,
+                          level_mode="both", date_start=None, date_end=None,
+                          outage_type=None, agency=None) -> pd.DataFrame:
+    """
+    Monthly feeder-level pivot for the Repeat Offenders table.
+    Adds station/feeders filters per review recommendation — mirrors the
+    filter surface of get_interruption_table() minus outage_type/agency
+    (kept consistent with the decision to scope those two filters to
+    Period Comparison only).
+
+    NOTE (Trends cascade enhancement): date_start/date_end are OPTIONAL and
+    additive. When omitted, behavior is unchanged (all-time pivot, exactly
+    as before). When provided, they scope the pivot to the combined
+    Period A start -> Period B end window selected on the Trends tab.
+
+    Returns one row per feeder with:
+        Feeder, Division, Station, <month1>, <month2>, ..., total_events,
+        total_cmi, mom_pct (latest vs prior month), pct_zone_cmi
+    Only feeders with total_events >= min_events are included.
+    """
+    filters, params = [], []
+    _add_cc_filter(filters, params, cc, alias="ie")
+    _add_in_filter(filters, params, "ie.division", division)
+    if station:
+        filters.append("ie.station = ?")
+        params.append(station)
+    if feeders:
+        placeholders = ",".join(["?"] * len(feeders))
+        filters.append(f"ie.feeder IN ({placeholders})")
+        params.extend(feeders)
+    if outage_type:
+        filters.append("ie.outage_type = ?")
+        params.append(outage_type)
+    if agency:
+        filters.append("ie.agency = ?")
+        params.append(agency)
+    cat_sql, cat_params = _feeder_category_subquery(feeder_category)
+    if cat_sql:
+        filters.append(cat_sql)
+        params.extend(cat_params)
+    if date_start:
+        filters.append("ie.event_date >= ?")
+        params.append(date_start)
+    if date_end:
+        filters.append("ie.event_date <= ?")
+        params.append(date_end)
+    lvl_cond, _ = _level_mode_condition(level_mode, alias="ie")
+    if lvl_cond:
+        filters.append(lvl_cond)
+    where = "WHERE " + " AND ".join(filters) if filters else ""
+
+    sql = f"""
+        SELECT
+            ie.feeder AS feeder,
+            ie.division AS division,
+            ie.station AS station,
+            strftime('%Y-%m', ie.event_date) AS month,
+            COUNT(*) AS events,
+            ROUND(COALESCE(SUM(ie.cmi), 0), 2) AS cmi
+        FROM interruption_events ie
+        {where}
+        GROUP BY ie.feeder, ie.division, ie.station, month
+        ORDER BY ie.feeder, month
+    """
+    with _con() as c:
+        raw = pd.read_sql(sql, c, params=params)
+
+    if raw.empty:
+        return raw
+
+    # Pivot: one row per feeder, one column per month (event counts for heat-map cells)
+    pivot = raw.pivot_table(index=["feeder", "division", "station"],
+                             columns="month", values="events",
+                             fill_value=0, aggfunc="sum").reset_index()
+    months_sorted = sorted([c for c in pivot.columns if c not in ("feeder", "division", "station")])
+    pivot = pivot[["feeder", "division", "station"] + months_sorted]
+
+    totals = raw.groupby(["feeder", "division", "station"], as_index=False).agg(
+        total_events=("events", "sum"),
+        total_cmi=("cmi", "sum"),
+    )
+    pivot = pivot.merge(totals, on=["feeder", "division", "station"])
+    pivot = pivot[pivot["total_events"] >= min_events].copy()
+
+    # MoM % — compare latest two available months per feeder (Insight B)
+    def _mom(row):
+        if len(months_sorted) < 2:
+            return 0.0
+        latest, prior = row[months_sorted[-1]], row[months_sorted[-2]]
+        if prior == 0:
+            return 100.0 if latest > 0 else 0.0
+        return round((latest - prior) / prior * 100, 1)
+
+    pivot["mom_pct"] = pivot.apply(_mom, axis=1)
+
+    # % of zone CMI — reframes ranking by customer-minutes impact, not just event count (Insight C)
+    zone_total_cmi = raw["cmi"].sum()
+    pivot["pct_zone_cmi"] = pivot["total_cmi"].apply(
+        lambda v: round(v / zone_total_cmi * 100, 1) if zone_total_cmi else 0.0
+    )
+
+    return pivot.sort_values("total_events", ascending=False).reset_index(drop=True)

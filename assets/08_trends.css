@@ -1,0 +1,264 @@
+/* ============================================================
+   08_trends.css — Trends & Comparison tab (v2)
+   Additive only. Aligns with mockup_v4.html. Does not modify or
+   redeclare any selector from 01-07. Superset of the v1 file
+   delivered earlier today — v1 classes kept, palette corrected,
+   new classes added per mockup diff (Priority list items 1-6).
+   ============================================================ */
+
+/* ---- PRIORITY 1: Section toolbar (title + controls inline) ---- */
+.section-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: .75rem;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+.trends-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--bescom-navy);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  margin: 0;
+}
+.trends-section { margin-bottom: 2rem; }
+
+/* ---- PRIORITY 2: Ranking insight narrative line ---- */
+.rank-insight-text {
+  font-size: 12.5px;
+  color: var(--bescom-muted);
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--bescom-divider);
+  line-height: 1.5;
+}
+.rank-insight-text strong {
+  color: var(--bescom-navy);
+  font-weight: 700;
+}
+
+/* ---- Period comparison delta badge (existing, kept from v1) ---- */
+.compare-kpi-delta {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-top: 6px;
+  width: fit-content;
+}
+.compare-kpi-delta.up   { color: var(--bescom-danger); background: var(--bescom-red-bg); }
+.compare-kpi-delta.down { color: var(--bescom-success); background: #e8f5ee; }
+.compare-kpi-delta.flat { color: var(--bescom-muted); background: var(--bescom-surface-2); }
+
+/* Period A/B pill badge, from mockup */
+.period-vs-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bescom-blue-soft);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--bescom-navy);
+}
+
+/* ---- Zone / Division ranking panel (kept from v1) ---- */
+.zone-rank-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+}
+.zone-rank-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+.zone-rank-bar-track {
+  flex: 1;
+  height: 10px;
+  background: var(--bescom-blue-bg);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--bescom-border);
+}
+.zone-rank-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 450ms cubic-bezier(.16,1,.3,1);
+  background: var(--bescom-blue);
+}
+
+/* ---- PRIORITY 4: CMI contribution bars (new — matches mockup) ---- */
+.cmi-contrib-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+  font-size: 12px;
+}
+.cmi-contrib-label {
+  width: 140px;
+  flex-shrink: 0;
+  color: var(--bescom-ink);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cmi-contrib-bar-track {
+  flex: 1;
+  height: 10px;
+  background: var(--bescom-surface-2);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--bescom-border);
+}
+.cmi-contrib-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--bescom-gold);
+  transition: width 450ms cubic-bezier(.16,1,.3,1);
+}
+.cmi-contrib-pct {
+  width: 48px;
+  flex-shrink: 0;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--bescom-navy);
+}
+
+/* ---- Repeat Offenders month-pivot heat table ---- */
+.month-pivot-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+.month-pivot-table th {
+  background: #eaf4fb;
+  color: var(--bescom-navy);
+  text-transform: uppercase;
+  font-size: 10.5px;
+  letter-spacing: .03em;
+  padding: 8px 9px;
+  text-align: right;
+  border-bottom: 2px solid var(--bescom-blue);
+  position: sticky;
+  top: 0;
+  white-space: nowrap;
+}
+.month-pivot-table th:first-child,
+.month-pivot-table th:nth-child(2),
+.month-pivot-table th:nth-child(3) { text-align: left; }
+.month-pivot-table td {
+  padding: 7px 9px;
+  text-align: right;
+  border-bottom: 1px solid var(--bescom-divider);
+  color: var(--bescom-ink);
+  white-space: nowrap;
+}
+.month-pivot-table td:first-child,
+.month-pivot-table td:nth-child(2),
+.month-pivot-table td:nth-child(3) { text-align: left; }
+.month-pivot-table tbody tr:nth-child(even) { background: rgba(0,152,212,.04); }
+.month-pivot-table tr:hover td { background: rgba(0,152,212,.06); }
+
+/* Heat-map intensity cells — PALETTE CORRECTED to match mockup_v4 exactly */
+.heat-cell {
+  border-radius: 4px;
+  font-weight: 600;
+  display: inline-block;
+  min-width: 24px;
+  padding: 2px 6px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.heat-0    { color: #94a3b8; background: transparent; }
+.heat-low  { background: #fff4d6; color: #8a6100; }
+.heat-mid  { background: #ffdca0; color: #7a3d00; }
+.heat-high { background: #ffb3b3; color: #8a1414; }
+.heat-crit { background: var(--bescom-danger); color: #fff; }
+
+/* Month-over-month arrow indicators */
+.mom-up   { color: var(--bescom-danger); font-weight: 700; font-size: 11px; }
+.mom-down { color: var(--bescom-success); font-weight: 700; font-size: 11px; }
+.mom-flat { color: var(--bescom-muted); font-weight: 700; font-size: 11px; }
+
+/* ---- PRIORITY 5: Repeat-offender status flags (new — matches mockup) ---- */
+.offender-flag {
+  display: inline-block;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+  margin-left: 6px;
+  vertical-align: middle;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: .02em;
+}
+.flag-repeat    { background: #fde8e8; color: var(--bescom-danger); }
+.flag-watch     { background: #fff4d6; color: #8a6100; }
+.flag-improving { background: #e3f7e8; color: var(--bescom-success); }
+
+/* ---- PRIORITY 6: Table legend / caption footer (new — matches mockup) ---- */
+.trends-table-legend {
+  font-size: 11.5px;
+  color: var(--bescom-muted);
+  margin-top: 10px;
+  line-height: 1.6;
+  padding-top: 8px;
+  border-top: 1px solid var(--bescom-divider);
+}
+.trends-table-legend strong { color: var(--bescom-navy); }
+
+/* ---- Misc mockup elements ---- */
+.subtab-row { display: flex; gap: .5rem; margin-bottom: 1rem; }
+.split-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+.min-events-input {
+  width: 56px;
+  padding: 4px 8px;
+  border: 1px solid var(--bescom-border);
+  border-radius: 6px;
+  font-size: 13px;
+  text-align: center;
+}
+.delta-up   { color: var(--bescom-danger); font-weight: 700; }
+.delta-down { color: var(--bescom-success); font-weight: 700; }
+
+/* ---- Responsive ---- */
+@media (max-width: 768px) {
+  .month-pivot-table { font-size: 11.5px; }
+  .zone-rank-row, .cmi-contrib-row { gap: 6px; }
+  .zone-rank-bar-track, .cmi-contrib-bar-track { height: 8px; }
+  .split-grid { grid-template-columns: 1fr; }
+  .cmi-contrib-label { width: 100px; }
+  .section-toolbar { flex-direction: column; align-items: flex-start; }
+}
+
+.compare-kpi-delta {
+  font-weight: 700;
+  font-size: 12px;
+}
+.compare-kpi-delta.delta-up   { color: var(--bescom-danger); }   /* worse = red, since higher SAIDI/SAIFI is bad */
+.compare-kpi-delta.delta-down { color: var(--bescom-success); }  /* better = green */
+.compare-kpi-delta.delta-flat { color: var(--bescom-muted); }
+.compare-kpi-base {
+  font-size: 11px;
+  color: var(--bescom-muted);
+  margin-left: 4px;
+}

@@ -37,6 +37,9 @@ from db import (
     get_feeder_customers_total,
     invalidate_hierarchy_cache, logger,
     #get_division_saifi_saidi,
+    get_period_comparison,      # NEW — Trends: Period Comparison
+    get_saidi_saifi_trend,      # NEW — Trends: Reliability Trends & Ranking
+    get_repeat_offenders,       # NEW — Trends: Repeat Offenders table
 )
 from delta_load import delta_insert_tracked, rollback_upload
 
@@ -411,7 +414,6 @@ def kpi_card(title, value, sub="", variant="",
 
     return html.Div(card_inner, className=card_cls)
 
-
 def section_heading(icon, text):
     return html.H5(f"{icon} {text}", className="section-heading")
 
@@ -558,6 +560,134 @@ def make_chart_modal(tblidprefix):
         ]),
     ], id=f"modal-chart-modal-{tblidprefix}", is_open=False, size="xl",
        backdrop=True, scrollable=True)
+def _build_topn_trend_fig(df, metric, warn, danger, top_n=4, height=380):
+    fig = go.Figure()
+    if df.empty:
+        fig.update_layout(**_base_layout(height=height, margin=dict(t=30, b=50, l=60, r=30)))
+        return fig
+
+    period_order = sorted(df["period"].unique(),
+                           key=lambda p: pd.to_datetime(p+"-01") if "Q" not in p else (int(p[:4]), int(p[-1])))
+    labels = [_format_period_label(p, "quarter" if "Q" in p else "month") for p in period_order]
+
+    pivot = df.pivot_table(index="period", columns="division", values=metric, aggfunc="mean").reindex(period_order)
+    latest = pivot.iloc[-1].sort_values(ascending=False)
+    top_divs = latest.index[:top_n].tolist()
+
+    numerator_col = "total_cmi" if metric == "saidi" else "events"
+    overall = df.groupby("period").apply(
+        lambda g: g[numerator_col].sum()/g["customers"].sum() if g["customers"].sum() else 0,
+        include_groups=False
+    ).reindex(period_order)
+    others_avg = pivot.drop(columns=top_divs, errors="ignore").mean(axis=1)
+
+    fig.add_bar(x=labels, y=overall.values, name="Zone-wide avg",
+                marker_color="#c9d6de", opacity=0.7,
+                hovertemplate="Zone-wide avg<br>%{x}: %{y:.4f}<extra></extra>")
+
+    highlight_colors = [_DANGER, _WARNING, "#7b3fa0", _PRIMARY, "#16a085"]
+    for i, d in enumerate(top_divs):
+        fig.add_scatter(x=labels, y=pivot[d], mode="lines+markers", name=d,
+                         line=dict(width=2.5, color=highlight_colors[i % len(highlight_colors)]),
+                         hovertemplate=f"{d}<br>%{{x}}: %{{y:.4f}}<extra></extra>")
+
+    fig.add_scatter(x=labels, y=others_avg, mode="lines", name="Other divisions (avg)",
+                     line=dict(width=1.5, color=_MUTED, dash="dot"),
+                     hovertemplate="Other divisions (avg)<br>%{x}: %{y:.4f}<extra></extra>")
+
+    fig.add_hline(y=warn, line_dash="dot", line_color=_WARNING,
+                  annotation_text="Warn", annotation_position="top left")
+    fig.add_hline(y=danger, line_dash="dot", line_color=_DANGER,
+                  annotation_text="Critical", annotation_position="top left")
+
+    y_title = "SAIDI (minutes / customer)" if metric == "saidi" else "SAIFI (interruptions / customer)"
+    fig.update_layout(**_base_layout(
+        height=height, margin=dict(t=50, b=50, l=65, r=30),
+        hovermode="x unified", legend=dict(orientation="h", y=1.25, x=0),
+        yaxis=dict(title=y_title, tickformat=".4f", gridcolor=_DIVIDER, gridwidth=1),
+        xaxis=dict(title="Period", tickangle=-20 if len(period_order) > 6 else 0),
+    ))
+    return fig
+
+#---------------------- NEW HELPER FOR SAIDI/SAIFI HEAT-MAP -------------- 
+def _build_heatmap_fig(df, metric, height=520):
+    fig = go.Figure()
+    if df.empty:
+        fig.update_layout(**_base_layout(height=height, margin=dict(t=30, b=50, l=100, r=30)))
+        return fig
+
+    period_order = sorted(df["period"].unique(),
+        key=lambda p: pd.to_datetime(p+"-01") if "Q" not in p else (int(p[:4]), int(p[-1])))
+    labels = [_format_period_label(p, "quarter" if "Q" in p else "month") for p in period_order]
+
+    pivot = df.pivot_table(index="division", columns="period", values=metric, aggfunc="mean").reindex(columns=period_order)
+    pivot = pivot.loc[pivot.mean(axis=1).sort_values(ascending=False).index]
+
+    # Rounded display text — independent of color-mapping precision
+    text_z = pivot.applymap(lambda v: "" if pd.isna(v) else f"{v:.2f}")
+
+    # Contrast-safe text color per cell: light background -> navy text, dark -> white
+    valid = pivot.values[~pd.isna(pivot.values)]
+    vmin = valid.min() if valid.size else 0
+    vmax = valid.max() if valid.size else 1
+    vrange = (vmax - vmin) or 1
+
+    def _text_color(v):
+        if pd.isna(v):
+            return "#94a3b8"  # muted gray for no-data
+        norm = (v - vmin) / vrange
+        return "#0a2540" if norm < 0.55 else "#ffffff"  # navy on light half, white on dark half
+
+    font_colors = pivot.applymap(_text_color).values
+
+    fig.add_trace(go.Heatmap(
+        z=pivot.values,
+        x=labels, y=pivot.index,
+        zmin=vmin, zmax=vmax,
+        colorscale=[
+            [0.0, "#eaf4f4"],   # light neutral — lowest values
+            [0.5, "#e09000"],   # amber — mid range
+            [1.0, "#8b1e1e"],   # deep red — highest values (darker than _DANGER for contrast headroom)
+        ],
+        text=text_z.values,
+        texttemplate="%{text}",
+        textfont=dict(size=11),
+        hovertemplate="%{y} — %{x}<br>Value: %{z:.2f}<extra></extra>",
+        colorbar=dict(title=metric.upper(), tickformat=".2f"),
+        xgap=2, ygap=2,  # subtle cell separation for readability
+    ))
+
+    # Per-cell text color requires a manual annotation pass since Heatmap
+    # textfont is a single color for the whole trace, not per-cell.
+    annotations = []
+    for i, div in enumerate(pivot.index):
+        for j, per in enumerate(labels):
+            v = pivot.values[i, j]
+            if pd.isna(v):
+                continue
+            annotations.append(dict(
+                x=per, y=div, text=f"{v:.2f}",
+                showarrow=False,
+                font=dict(size=11, color=font_colors[i, j]),
+            ))
+
+    y_title = "SAIDI (minutes / customer)" if metric == "saidi" else "SAIFI (interruptions / customer)"
+    fig.update_layout(**_base_layout(
+        height=height, margin=dict(t=40, b=40, l=120, r=30),
+        xaxis=dict(title="Period"),
+        yaxis=dict(title="Division", autorange="reversed"),
+        annotations=annotations,
+    ))
+    fig.update_layout(coloraxis_colorbar=dict(title=y_title))
+    fig.update_traces(texttemplate="")  # suppress default text; annotations render the numbers instead
+    return fig
+
+def _format_period_label(period, granularity="month"):
+    if granularity == "quarter":
+        yr, q = period.split("-Q")
+        return f"Q{q} '{yr[2:]}"
+    dt = pd.to_datetime(period + "-01")
+    return dt.strftime("%b '%y")
        
 # =============================================================================
 # HEALTH CARD OVER VIEW CC Helper
@@ -1072,7 +1202,6 @@ def build_overview():
     ], fluid=True, className="tab-pane")
 
 # ── TAB 2 & 3: CC-specific ────────────────────────────────────────────────────
-
 def build_explorer_tab():
     sfx = "ex"
 
@@ -1248,7 +1377,6 @@ def _unique_feeder_customers(df: pd.DataFrame) -> int:
     return int(df.groupby("Feeder")["Customers Affected"].max().sum())
     
 # ── ADMIN TAB ─────────────────────────────────────────────────────────────────
-
 # Required columns for upload validation
 _REQUIRED_UPLOAD_RULES = {
     "feeder": lambda c: c == "feeder" or ("feeder" in c and "type" not in c),
@@ -1281,6 +1409,151 @@ def _validate_upload_df(df: pd.DataFrame):
         warnings.append("Cannot derive event_date — trouble date/time column not found.")
 
     return len(errors) == 0, errors, warnings
+
+# ============================================================
+# NEW: Trends & Comparison tab — app.py additions
+# Suffix convention: "tr" (mirrors "ex" for Explorer, "ov" implicit for Overview)
+# Purely additive — no existing function, callback, or ID is modified.
+# ============================================================
+
+# ---- 1. Layout builder -------------------------------------------------
+
+def build_trends_tab():
+    sfx = "tr"
+    return dbc.Container([
+        dbc.Row(dbc.Col([
+            html.H5("Trends & Comparison", className="page-title"),
+            html.P("Compare periods, track reliability trends, and spot repeat-offender feeders.",
+                   className="page-subtitle text-muted"),
+        ])),
+
+        # Shared filter bar — same structure as Explorer, id suffix "tr"
+        html.Div([
+            hierarchy_dropdowns(f"dd-cc-{sfx}", f"dd-div-{sfx}", f"dd-stn-{sfx}", f"dd-fdr-{sfx}", default_cc=['BICC-1', 'BICC-2']),
+            dbc.Row([
+                dbc.Col([
+                    html.Label("Outage Type"),
+                    dcc.Dropdown(
+                        id=f"dd-otype-{sfx}",
+                        options=[{"label": t, "value": t} for t in ["Scheduled", "Unscheduled"]],
+                        placeholder="All types", clearable=True,
+                    ),
+                ], xs=12, sm=4, md=2),
+                dbc.Col([
+                    html.Label("Utility"),
+                    dcc.Dropdown(
+                        id=f"dd-agency-{sfx}",
+                        options=[{"label": a, "value": a} for a in ["BESCOM", "KPTCL"]],
+                        placeholder="KPTCL / BESCOM", clearable=True,
+                    ),
+                ], xs=12, sm=4, md=2),
+                dbc.Col(dbc.Button("Apply Filters", id=f"btn-apply-{sfx}", className="btn-apply mt-4"),
+                        xs=12, sm=4, md=2),
+            ], className="d-flex align-items-end g-3 mb-2"),
+        ], className="filter-bar"),
+
+        html.Div(id=f"breadcrumb-{sfx}", className="breadcrumb-strip", children="All networks"),
+    # ── NEW: Subtab nav ──────────────────────────────────────────────
+    html.Div([
+        dbc.Button("Period Comparison", id=f"subtab-compare-btn-{sfx}",
+                   className="btn-subtab active", n_clicks=0),
+        dbc.Button("Reliability Trends & Repeat Offenders", id=f"subtab-reliability-btn-{sfx}",
+                   className="btn-subtab", n_clicks=0),
+        ], className="subtab-nav mb-3"),
+    dcc.Store(id=f"store-subtab-{sfx}", data="compare"),
+        # ---- Section 1: Period Comparison ----
+        html.Div([
+        html.Div([
+            html.Div([
+                html.Div("Period Comparison", className="trends-section-title"),
+                html.Div([
+                    html.Span("Period A", className="period-label"),
+                    dcc.DatePickerRange(id=f"period-a-{sfx}", display_format="DD MMM YYYY",
+                                         className="period-picker"),
+                    html.Span("VS", className="period-vs-badge"),
+                    html.Span("Period B", className="period-label"),
+                    dcc.DatePickerRange(id=f"period-b-{sfx}", display_format="DD MMM YYYY",
+                                         className="period-picker"),
+                    dbc.Button("Compare", id=f"btn-compare-{sfx}", className="btn-apply"),
+                ], className="period-toolbar-group"),
+            ], className="section-toolbar"),
+        ], className="trends-section mb-3"),
+       dbc.Row(id=f"compare-kpi-row-{sfx}", className="g-3 mb-3"),
+       dbc.Row(
+            dbc.Col(
+                html.Div([
+                    html.Div("Daily Outage Overlay — Period A vs Period B",
+                              className="chart-card-title"),
+                    dcc.Graph(id=f"chart-overlay-{sfx}", config={"displayModeBar": False}),
+                ], className="chart-card"),
+                width=12,
+            ),
+            className="g-3 mb-4"),
+    ], id=f"pane-compare-{sfx}", style={"display": "block"}),
+      # ── PANE 2: Reliability Trends & Repeat Offenders ────────────────
+    html.Div([
+        # ---- Section 2: Reliability Trends + Zone Ranking ----
+        html.Div([
+        html.Div([
+        html.Div("Reliability Trends & Division Ranking", className="trends-section-title"),
+        dbc.RadioItems(
+            id=f"reliability-view-{sfx}",
+            options=[
+                {"label": "Top Drivers", "value": "topn"},
+                {"label": "Full Zone Heatmap", "value": "heatmap"},
+            ],
+            value="topn", inline=True,
+            className="radio-inline-lite mb-0 me-3",
+            inputCheckedStyle={"backgroundColor": _PRIMARY, "borderColor": _PRIMARY},
+        ),
+        dbc.RadioItems(
+            id=f"trend-gran-{sfx}",
+            options=[{"label": "Month", "value": "month"}, {"label": "Quarter", "value": "quarter"}],
+            value="month", inline=True, className="radio-inline-lite mb-0"
+                ),
+            ], className="section-toolbar"),
+        ], className="trends-section mb-3"),
+       dbc.Row([
+            dbc.Col(html.Div([
+                html.Div("SAIDI Trend (min/customer)", className="chart-card-title"),
+                dcc.Graph(id=f"chart-saidi-{sfx}", config={"displayModeBar": False}),
+            ], className="chart-card"), md=6),
+            dbc.Col(html.Div([
+                html.Div("SAIFI Trend (interruptions/customer)", className="chart-card-title"),
+                dcc.Graph(id=f"chart-saifi-{sfx}", config={"displayModeBar": False}),
+            ], className="chart-card"), md=6),
+        ], className="g-3 mb-4"),
+        dbc.Row(dbc.Col(html.Div(id=f"zone-rank-{sfx}", className="chart-card"), width=12), className="g-3 mb-4"),
+        # ---- Section 3: Repeat Offenders ----
+        html.Div([
+        html.Div([
+        html.Div("Repeat Tripped Feeders — Monthly Breakdown", className="trends-section-title"),
+        html.Div([
+            html.Label("Min events (period)", className="form-label-lite me-1 mb-0"),
+            dcc.Input(id=f"min-events-{sfx}", type="number", value=10, min=1, step=1,
+                       className="min-events-input", debounce=True),
+                html.Label([
+                    dcc.Checklist(
+                        id=f"split-month-{sfx}",
+                        options=[{"label": " Split by month", "value": "split"}],
+                        value=["split"],
+                        className="split-month-check",
+                        inputClassName="split-month-checkbox",
+                    ),
+                ], className="split-month-label"),
+                dbc.Button("Export", id=f"btn-export-offenders-{sfx}",
+                           className="btn-toolbar-action"),
+                dcc.Download(id=f"download-offenders-{sfx}"),
+                ], className="offenders-toolbar-group"),
+            ], className="section-toolbar"),
+            ], className="trends-section mb-3"),
+        dbc.Row(dbc.Col(html.Div(id=f"offenders-table-{sfx}", className="chart-card"), width=12), className="g-3 mb-4"),
+        ], id=f"pane-reliability-{sfx}", style={"display": "none"}),
+
+        dcc.Store(id=f"store-compare-{sfx}", data=None),
+        dcc.Store(id=f"store-trend-{sfx}", data=None),
+        dcc.Store(id=f"store-offenders-{sfx}", data=None),
+    ], fluid=True, className="tab-pane")
 
 
 def build_admin_tab():
@@ -1428,6 +1701,12 @@ def build_landing():
             "tab": "tab-ex",
         },
         {
+            "icon": "...", 
+            "title": "Trends & Comparison",
+            "desc": "Compare periods, track SAIDI/SAIFI trends, and spot repeat-offender feeders.",
+            "tab": "tab-trends"
+        },
+        {
             "icon": "🛠",
             "title": "Admin",
             "desc": "Upload new interruption data, manage uploads, and rollback batches.",
@@ -1549,9 +1828,10 @@ app.layout = html.Div([
     ),
 
     # Section panes — pre-built once, shown/hidden by CSS display
-    html.Div(build_overview(),           id="region-overview", className="section-pane", style={"display": "none"}),
-    html.Div(build_explorer_tab(),               id="region-ex",        className="section-pane", style={"display": "none"}),
-    html.Div(build_admin_tab(),          id="region-admin",   className="section-pane", style={"display": "none"}),
+    html.Div(build_overview(),     id="region-overview", className="section-pane", style={"display": "none"}),
+    html.Div(build_explorer_tab(), id="region-ex",        className="section-pane", style={"display": "none"}),
+    html.Div(build_trends_tab(),   id="region-trends", className="section-pane", style={"display": "none"}),
+    html.Div(build_admin_tab(),    id="region-admin",   className="section-pane", style={"display": "none"}),
 
     # Hidden dbc.Tabs stub — keeps existing `tabs` callbacks happy
     # activetab is driven by store-active-tab callback below
@@ -1562,6 +1842,7 @@ app.layout = html.Div([
         children=[
             dbc.Tab(tab_id="tab-overview"),
             dbc.Tab(tab_id="tab-ex"),
+            dbc.Tab(tab_id="tab-trends"),   # <-- NEW
             dbc.Tab(tab_id="tab-admin"),
         ],
     ),
@@ -1592,12 +1873,71 @@ def restore_date_picker(_n):
 def sync_date_store(start, end):
     s, e = _clamp_date_window(start or _min_dt, end or _max_dt)
     return {"start": s, "end": e}
+#Wiring changes STARTS
+@app.callback(
+    Output("period-a-tr", "min_date_allowed"),
+    Output("period-a-tr", "max_date_allowed"),
+    Output("period-a-tr", "start_date"),
+    Output("period-a-tr", "end_date"),
+    Input("store-date-range", "data"),
+    State("period-a-tr", "start_date"),
+    State("period-a-tr", "end_date"),
+    prevent_initial_call=False,
+)
+def sync_period_a_with_global(date_store, a_start, a_end):
+    ds = (date_store or {}).get("start") or _min_dt
+    de = (date_store or {}).get("end") or _max_dt
+    ds_ts, de_ts = pd.to_datetime(ds), pd.to_datetime(de)
+
+    if not a_start or not a_end:
+        span_days = max((de_ts - ds_ts).days + 1, 1)
+        split_days = max(span_days // 2, 1)
+        a_start_ts = ds_ts
+        a_end_ts = min(ds_ts + pd.Timedelta(days=split_days - 1), de_ts)
+        return ds, de, str(a_start_ts.date()), str(a_end_ts.date())
+
+    a_start_ts, a_end_ts = pd.to_datetime(a_start), pd.to_datetime(a_end)
+    if a_start_ts < ds_ts: a_start_ts = ds_ts
+    if a_end_ts > de_ts: a_end_ts = de_ts
+    if a_start_ts > a_end_ts:
+        a_start_ts, a_end_ts = ds_ts, min(ds_ts, de_ts)
+    return ds, de, str(a_start_ts.date()), str(a_end_ts.date())
 
 
+@app.callback(
+    Output("period-b-tr", "min_date_allowed"),
+    Output("period-b-tr", "max_date_allowed"),
+    Output("period-b-tr", "start_date"),
+    Output("period-b-tr", "end_date"),
+    Input("period-a-tr", "end_date"),
+    Input("store-date-range", "data"),
+    State("period-b-tr", "start_date"),
+    State("period-b-tr", "end_date"),
+    prevent_initial_call=False,
+)
+def sync_period_b_with_period_a(a_end, date_store, b_start, b_end):
+    ds = (date_store or {}).get("start") or _min_dt
+    de = (date_store or {}).get("end") or _max_dt
+    ds_ts, de_ts = pd.to_datetime(ds), pd.to_datetime(de)
+
+    min_b_ts = pd.to_datetime(a_end) if a_end else ds_ts
+    if min_b_ts < ds_ts: min_b_ts = ds_ts
+    if min_b_ts > de_ts: min_b_ts = de_ts
+
+    if not b_start or not b_end:
+        return str(min_b_ts.date()), de, str(min_b_ts.date()), str(de_ts.date())
+
+    b_start_ts, b_end_ts = pd.to_datetime(b_start), pd.to_datetime(b_end)
+    if b_start_ts < min_b_ts: b_start_ts = min_b_ts
+    if b_end_ts > de_ts: b_end_ts = de_ts
+    if b_start_ts > b_end_ts:
+        b_start_ts, b_end_ts = min_b_ts, de_ts
+    return str(min_b_ts.date()), de, str(b_start_ts.date()), str(b_end_ts.date())
 @app.callback(
     Output("store-level-mode", "data"),
     Input("overview-level-mode", "value"),
 )
+#Wiring changes ENDS
 def sync_level_mode(level_mode):
     return level_mode or "both"
     
@@ -2721,6 +3061,438 @@ def _register_cc_callbacks(sfx: str):
 
 _register_cc_callbacks("ex")
 
+# ============================================================
+# NEW: Lightweight cascade-only callback registrar
+# Registers ONLY the 4 dropdown-cascade callbacks (Division / Feeder-Category /
+# Station / Feeder) for a given suffix — no table, no chart-modal, no export,
+# no station-metric radio, no subtab toggle. Safe to call for tabs like Trends
+# that reuse hierarchy_dropdowns() but do NOT reuse Explorer's full data pane.
+#
+# Mirrors the exact cascade logic already inside _register_cc_callbacks(),
+# just extracted into its own standalone function — zero new query logic,
+# zero drift risk from the proven Explorer cascade.
+# ============================================================
+
+def _register_cascade_callbacks(sfx: str):
+
+    @app.callback(
+        Output(f"dd-div-{sfx}", "options"),
+        Output(f"dd-div-{sfx}", "value"),
+        Input(f"dd-cc-{sfx}", "value"),
+    )
+    def _update_divisions(cc):
+        if not cc:
+            return [], []
+        cc_list = cc if isinstance(cc, list) else [cc]
+        divs, seen = [], set()
+        for z in cc_list:
+            for d in get_divisions(z):
+                if d not in seen:
+                    seen.add(d)
+                    divs.append(d)
+        return [{"label": d, "value": d} for d in divs], []
+
+    @app.callback(
+        Output(f"dd-stn-{sfx}-cat", "options"),
+        Output(f"dd-stn-{sfx}-cat", "value"),
+        Input(f"dd-cc-{sfx}", "value"),
+        Input(f"dd-div-{sfx}", "value"),
+        Input(f"dd-stn-{sfx}", "value"),
+    )
+    def _update_feeder_categories(cc, div, stn):
+        if not cc or not div:
+            return [], []
+        cc_list = cc if isinstance(cc, list) else [cc]
+        divs = div if isinstance(div, list) else [div]
+        cats, seen = [], set()
+        for z in cc_list:
+            for d in divs:
+                for c in get_feeder_categories(z, d, stn if stn else None):
+                    if c not in seen:
+                        seen.add(c)
+                        cats.append(c)
+        return [{"label": c, "value": c} for c in cats], []
+
+    @app.callback(
+        Output(f"dd-stn-{sfx}", "options"),
+        Output(f"dd-stn-{sfx}", "value"),
+        Input(f"dd-cc-{sfx}", "value"),
+        Input(f"dd-div-{sfx}", "value"),
+    )
+    def _update_stations(cc, div):
+        if not cc or not div:
+            return [], None
+        cc_list = cc if isinstance(cc, list) else [cc]
+        divs = div if isinstance(div, list) else [div]
+        stns = []
+        for z in cc_list:
+            for d in divs:
+                stns += get_stations(z, d)
+        return [{"label": s, "value": s} for s in stns], None
+
+    @app.callback(
+        Output(f"dd-fdr-{sfx}", "options"),
+        Output(f"dd-fdr-{sfx}", "value"),
+        Input(f"dd-cc-{sfx}", "value"),
+        Input(f"dd-div-{sfx}", "value"),
+        Input(f"dd-stn-{sfx}", "value"),
+        Input(f"dd-stn-{sfx}-cat", "value"),
+    )
+    def _update_feeders(cc, div, stn, fdrcat):
+        if not cc or not div or not stn:
+            return [], []
+        cc_list = cc if isinstance(cc, list) else [cc]
+        divs = div if isinstance(div, list) else [div]
+        cat_filter = fdrcat if fdrcat else None
+        fdrs, seen = [], set()
+        for z in cc_list:
+            for d in divs:
+                for f in get_feeders(z, d, stn, feeder_category=cat_filter):
+                    if f not in seen:
+                        seen.add(f)
+                        fdrs.append(f)
+        return [{"label": f, "value": f} for f in fdrs], []
+        
+_register_cascade_callbacks("tr")     # NEW: cascade dropdowns only, for Trends
+
+# ---- 4. New callbacks (all new IDs, no collision with Explorer/Overview) ----
+
+@app.callback(
+    Output(f"compare-kpi-row-tr", "children"),
+    Output(f"chart-overlay-tr", "figure"),
+    Output(f"store-compare-tr", "data"),
+    Input("btn-compare-tr", "n_clicks"),
+    State("dd-cc-tr", "value"), State("dd-div-tr", "value"), State("dd-stn-tr", "value"),
+    State("dd-fdr-tr", "value"), State("dd-stn-tr-cat", "value"),
+    State("dd-otype-tr", "value"), State("dd-agency-tr", "value"),
+    State("period-a-tr", "start_date"), State("period-a-tr", "end_date"),
+    State("period-b-tr", "start_date"), State("period-b-tr", "end_date"),
+    State("store-level-mode", "data"),
+    prevent_initial_call=True,
+)
+def update_period_comparison(n, cc, div, stn, fdrs, fdrcat, otype, agency,
+                              a_start, a_end, b_start, b_end, level_mode):
+    result = get_period_comparison(
+        cc=cc, division=div, station=stn, feeders=fdrs or None, feeder_category=fdrcat,
+        outage_type=otype, agency=agency,
+        period_a_start=a_start, period_a_end=a_end,
+        period_b_start=b_start, period_b_end=b_end,
+        level_mode=level_mode or "both",
+    )
+    a, b = result["period_a"], result["period_b"]
+
+    def _delta(v_a, v_b):
+        if v_a == 0:
+            return 0.0
+        return round((v_b - v_a) / v_a * 100, 1)
+
+    def _kpi(title, val_a, val_b, unit="", decimals=1, worse_if_up=True):
+        d = _delta(val_a, val_b)
+        arrow = "▲" if d > 0 else ("▼" if d < 0 else "—")
+        is_worse = (d > 0) if worse_if_up else (d < 0)
+        cls = "delta-up" if d > 0 else ("delta-down" if d < 0 else "")
+        border_color = (
+            "var(--bescom-danger)" if (d != 0 and is_worse)
+            else "var(--bescom-success)" if d != 0
+            else "var(--bescom-border)"
+        )
+        val_fmt = f"{val_b:,.{decimals}f}{unit}"
+        card_inner = html.Div([
+            html.P(title, className="kpi-label"),
+            html.H3([
+                val_fmt,
+                html.Span(f" {arrow} {abs(d)}%", className=f"compare-kpi-delta {cls}"),
+            ], className="kpi-value"),
+            html.P(f"{val_a:,.{decimals}f}{unit} in Period A", className="kpi-sub"),
+        ], className="kpi-card-body", style={"padding": ".9rem 1rem"})
+        return dbc.Col(
+            html.Div(card_inner, className="kpi-card",
+                      style={"borderLeft": f"4px solid {border_color}"}),
+            md=3,
+        )
+
+    kpi_row = [
+        _kpi("Total Events", a["events"], b["events"], decimals=0),
+        _kpi("Total Minutes", a["total_mins"], b["total_mins"], decimals=1),
+        _kpi("SAIDI", a["saidi"], b["saidi"], unit=" min/cust", decimals=4),
+        _kpi("SAIFI", a["saifi"], b["saifi"], unit=" int/cust", decimals=4),
+    ]
+
+    fig = go.Figure()
+    da, db_ = result["daily_a"], result["daily_b"]
+    if not da.empty:
+        fig.add_scatter(x=list(range(len(da))), y=da["total_events"], name="Period A",
+                         line=dict(color=_PRIMARY, width=2.5))
+    if not db_.empty:
+        fig.add_scatter(x=list(range(len(db_))), y=db_["total_events"], name="Period B",
+                         line=dict(color=_DANGER, width=2.5, dash="dash"))
+    fig.update_layout(**_base_layout(height=280, margin=dict(t=30, b=40, l=52, r=30)))
+    
+      # ── NEW: build a JSON-serializable copy for the dcc.Store output ──────
+    da_store = da.copy()
+    db_store = db_.copy()
+    if "event_date" in da_store.columns:
+        da_store["event_date"] = da_store["event_date"].astype(str)
+    if "event_date" in db_store.columns:
+        db_store["event_date"] = db_store["event_date"].astype(str)
+    compare_data = {
+        "period_a": a,                              # plain dict of scalars — already fine
+        "period_b": b,                               # plain dict of scalars — already fine
+        "daily_a": da_store.to_dict("records"),      # DataFrame -> list of dicts
+        "daily_b": db_store.to_dict("records"),       # DataFrame -> list of dicts
+        }
+
+    return kpi_row, fig, compare_data
+    
+@app.callback(
+    Output(f"chart-saidi-tr", "figure"),
+    Output(f"chart-saifi-tr", "figure"),
+    Output(f"zone-rank-tr", "children"),
+    Output(f"store-trend-tr", "data"),
+    Input("btn-apply-tr", "n_clicks"),
+    Input("trend-gran-tr", "value"),
+    Input("reliability-view-tr", "value"),
+    State("dd-cc-tr", "value"), State("dd-div-tr", "value"), State("dd-stn-tr", "value"),
+    State("dd-fdr-tr", "value"), State("dd-stn-tr-cat", "value"),
+    State("dd-otype-tr", "value"), State("dd-agency-tr", "value"),
+    State("store-date-range", "data"),
+    State("store-level-mode", "data"),
+    prevent_initial_call=True,
+)
+def update_reliability_trends(n, granularity, view_mode, cc, div, stn, fdrs, fdrcat, otype, agency, date_store, level_mode):
+    ds = (date_store or {}).get("start")
+    de = (date_store or {}).get("end")
+    df = get_saidi_saifi_trend(
+        cc=cc, division=div, station=stn, feeders=fdrs or None, feeder_category=fdrcat,
+        granularity=granularity or "month", level_mode=level_mode or "both",
+        date_start=ds, date_end=de, outage_type=otype, agency=agency,
+    )
+    if (view_mode or "topn") == "heatmap":
+        fig_saidi = _build_heatmap_fig(df, metric="saidi")
+        fig_saifi = _build_heatmap_fig(df, metric="saifi")
+    else:
+        fig_saidi = _build_topn_trend_fig(
+            df, metric="saidi", warn=KPI_SAIDI_WARN_CC, danger=KPI_SAIDI_DANGER_CC)
+        fig_saifi = _build_topn_trend_fig(
+            df, metric="saifi", warn=KPI_SAIFI_WARN_CC, danger=KPI_SAIFI_DANGER_CC)
+    # Zone ranking — latest period, all divisions in scope, sorted by SAIDI desc
+    zone_rank_children = [html.Div("No data for selected filters.", className="text-muted small py-3")]
+    if not df.empty:
+        periods_sorted = sorted(df["period"].unique())
+        latest_period = periods_sorted[-1]
+        prev_period = periods_sorted[-2] if len(periods_sorted) >= 2 else None
+        latest = df[df["period"] == latest_period].sort_values("saidi", ascending=False)
+        prev_lookup = (df[df["period"] == prev_period].set_index("division")
+                       if prev_period is not None else None)
+        max_saidi = latest["saidi"].max() or 1
+
+        # ── Missing heading, now added to match mockup ──────────────────
+        header_block = html.Div([
+            html.Span("Division Reliability Ranking (SAIDI) — This Period",
+                      className="chart-card-title"),
+            html.Span(" reuses existing get_saidi_saifi_trend",
+                      style={"fontWeight": 400, "color": _MUTED, "fontSize": "11px", "marginLeft": "6px"}),
+        ], style={"marginBottom": ".5rem"})
+
+        rows = [header_block]
+        colors = [_DANGER, "#e09000", "#e09000", _SUCCESS, _SUCCESS]
+        for i, (_, r) in enumerate(latest.iterrows()):
+            pct = round(r["saidi"] / max_saidi * 100, 1) if max_saidi else 0
+            color = colors[min(i, len(colors) - 1)]
+
+            # ── Missing MoM % delta, now computed vs prior period ───────
+            mom = 0.0
+            if prev_lookup is not None and r["division"] in prev_lookup.index:
+                prev_saidi = prev_lookup.loc[r["division"], "saidi"]
+                mom = round((r["saidi"] - prev_saidi) / prev_saidi * 100, 1) if prev_saidi else 0.0
+            mom_cls = "mom-up" if mom > 0 else ("mom-down" if mom < 0 else "mom-flat")
+            arrow = "▲" if mom > 0 else ("▼" if mom < 0 else "—")
+
+            rows.append(html.Div([
+                html.Div(str(i + 1), className="zone-rank-badge", style={"background": color}),
+                html.Div(r["division"], style={"width": "150px", "fontSize": "12.5px", "fontWeight": 600}),
+                html.Div(html.Div(style={"width": f"{pct}%", "background": color, "height": "100%"}),
+                         className="zone-rank-bar-track"),
+                html.Div(f"{r['saidi']:.3f}", style={"width": "80px", "textAlign": "right", "fontWeight": 700}),
+                html.Div(html.Span(f"{arrow} {abs(mom)}", className=mom_cls),
+                         style={"width": "60px", "textAlign": "right"}),
+            ], className="zone-rank-row"))
+        zone_rank_children = rows
+    #Insight Children
+    insight_children = []
+    if not df.empty:
+        latest_period = df["period"].max()
+        latest = df[df["period"] == latest_period].sort_values("saidi", ascending=False)
+        if len(latest) >= 2:
+            worst = latest.iloc[0]
+            best = latest.iloc[-1]
+            ratio = round(worst["saidi"] / best["saidi"], 1) if best["saidi"] > 0 else 0
+            insight_children = [
+                    html.Div([
+                        html.Strong(str(worst["division"])),
+                        f" is {ratio}× worse than ",
+                        html.Strong(str(best["division"])),
+                        " this period. Ranking recalculates live as filters change.",
+                    ], className="rank-insight-text")
+                ]        
+    zone_rank_children = zone_rank_children + insight_children
+
+    return fig_saidi, fig_saifi, zone_rank_children, df.to_dict("records")
+
+@app.callback(
+    Output(f"offenders-table-tr", "children"),
+    Output(f"store-offenders-tr", "data"),
+    Input("btn-apply-tr", "n_clicks"),
+    Input("min-events-tr", "value"),
+    Input(f"split-month-tr", "value"),          # NEW
+    State("dd-cc-tr", "value"), State("dd-div-tr", "value"), State("dd-stn-tr", "value"),
+    State("dd-fdr-tr", "value"), State("dd-stn-tr-cat", "value"),
+    State("store-date-range", "data"),
+    State("store-level-mode", "data"),
+    prevent_initial_call=True,
+)
+def update_repeat_offenders(n, min_events, split_month, cc, div, stn, fdrs, fdrcat, date_store, level_mode):
+    ds = (date_store or {}).get("start")
+    de = (date_store or {}).get("end")
+    df = get_repeat_offenders(
+        cc=cc, division=div, station=stn, feeders=fdrs or None, feeder_category=fdrcat,
+        min_events=min_events or 3, level_mode=level_mode or "both",
+        date_start=ds, date_end=de,
+    )
+    if df.empty:
+        return _empty_state("No repeat offenders", "No feeders meet the minimum event threshold for this period."), []
+
+    month_cols = [c for c in df.columns if c not in
+                  ("feeder", "division", "station", "total_events", "total_cmi", "mom_pct", "pct_zone_cmi")]
+                  
+    def _month_label(col):
+        try:
+            return pd.to_datetime(col, format="%Y-%m").strftime("%b-%y").upper()
+        except Exception:
+            return str(col)
+            
+    month_labels = {c: _month_label(c) for c in month_cols} 
+
+    split_on = bool(split_month and "split" in split_month)
+        
+    def _derive_flag(row, month_cols):
+        vals = [int(row[m]) for m in month_cols]
+        if len(vals) < 2:
+            return None
+        last, prev = vals[-1], vals[-2]
+        peak = max(vals)
+        if last >= prev and last >= peak * 0.8 and peak > 0:
+            return ("REPEAT", "flag-repeat")
+        if last < peak * 0.6 and len(vals) >= 3 and vals[-1] <= vals[-2] <= vals[-3]:
+            return ("IMPROVING", "flag-improving")
+        return ("WATCH", "flag-watch")
+    
+    def _heat_class(v):
+        if v == 0:
+            return "heat-0"
+        elif v == 1:
+            return "heat-low"
+        elif v <= 3:
+            return "heat-mid"
+        elif v <= 5:
+            return "heat-high"
+        else:
+            return "heat-crit"
+            
+    def _build_collapsed_offenders_table(df, month_cols):
+        header = html.Tr([html.Th(c) for c in
+            ["Feeder", "Division", "Station", "Total Events (period)",
+             "MoM %", "Total Events", "Total CMI", "% of Zone CMI"]])
+        body_rows = []
+        for _, r in df.iterrows():
+            flag_label, flag_cls = _derive_flag(r, month_cols) or (None, None)
+            feeder_cell = html.Td([
+                r["feeder"],
+                html.Span(flag_label, className=f"offender-flag {flag_cls}") if flag_label else None,
+            ])
+            mom = r.get("mom_pct", 0)
+            mom_cls = "mom-up" if mom > 0 else ("mom-down" if mom < 0 else "mom-flat")
+            arrow = "▲" if mom > 0 else ("▼" if mom < 0 else "—")
+            cells = [
+                feeder_cell, html.Td(r["division"]), html.Td(r["station"]),
+                html.Td(str(sum(int(r[m]) for m in month_cols))),
+                html.Td(html.Span(f"{arrow} {abs(mom)}%", className=mom_cls)),
+                html.Td(html.Strong(str(r["total_events"]))),
+                html.Td(f"{r['total_cmi']:,}"),
+                html.Td(f"{r['pct_zone_cmi']}%"),
+            ]
+            body_rows.append(html.Tr(cells))
+        return html.Table([html.Thead(header), html.Tbody(body_rows)],
+                           className="month-pivot-table")
+
+    header = html.Tr([html.Th(c) for c in ["Feeder", "Division", "Station"] + [html.Th(month_labels[c]) for c in month_cols] + ["M-o-M %", "Total Events", "Total CMI", "% of Zone CMI"]])
+    body_rows = []
+    for _, r in df.iterrows():
+        flag_label, flag_cls = _derive_flag(r, month_cols) or (None, None)
+        feeder_cell = html.Td([
+            r["feeder"],
+            html.Span(flag_label, className=f"offender-flag {flag_cls}") if flag_label else None,
+        ])
+        cells = [feeder_cell, html.Td(r["division"]), html.Td(r["station"])]
+        cells += [html.Td(html.Span(int(r[m]), className=f"heat-cell {_heat_class(int(r[m]))}")) for m in month_cols]
+        #cells += [html.Td(html.Span(str(int(val)), className=f"heat-cell {heat_class(val)}"),key=month_col)]
+        mom_cls = "mom-up" if r["mom_pct"] > 0 else ("mom-down" if r["mom_pct"] < 0 else "mom-flat")
+        arrow = "▲" if r["mom_pct"] > 0 else ("▼" if r["mom_pct"] < 0 else "—")
+        cells.append(html.Td(html.Span(f"{arrow} {abs(r['mom_pct'])}%", className=mom_cls)))
+        cells.append(html.Td(html.Strong(int(r["total_events"]))))
+        cells.append(html.Td(f"{r['total_cmi']:,.0f}"))
+        cells.append(html.Td([
+            html.Div(className="cmi-contrib-bar-track", children=[
+                html.Div(className="cmi-contrib-bar-fill",
+                          style={"width": f"{min(r['pct_zone_cmi'], 100)}%"}),
+            ]),
+            html.Span(f"{r['pct_zone_cmi']}%"),
+        ]))
+        body_rows.append(html.Tr(cells))
+
+    table = html.Table([html.Thead(header), html.Tbody(body_rows)], className="month-pivot-table")
+    if split_on:
+        table = table   # existing per-month table
+    else:
+        table = _build_collapsed_offenders_table(df, month_cols)
+        
+    return html.Div(table, style={"overflowX": "auto"}), df.to_dict("records")
+    
+@app.callback(
+    Output(f"download-offenders-tr", "data"),
+    Input(f"btn-export-offenders-tr", "n_clicks"),
+    State(f"store-offenders-tr", "data"),
+    prevent_initial_call=True,
+)
+def export_offenders(n, stored_data):
+    if not stored_data:
+        return no_update
+    df = pd.DataFrame(stored_data)
+    return dcc.send_data_frame(df.to_csv, "repeat_offenders.csv", index=False)
+
+#---------TOGGLE TRENDS SUBTAB CALLBACKS (Compare / Reliability) ---------
+@app.callback(
+    Output(f"pane-compare-tr", "style"),
+    Output(f"pane-reliability-tr", "style"),
+    Output(f"subtab-compare-btn-tr", "className"),
+    Output(f"subtab-reliability-btn-tr", "className"),
+    Output(f"store-subtab-tr", "data"),
+    Input(f"subtab-compare-btn-tr", "n_clicks"),
+    Input(f"subtab-reliability-btn-tr", "n_clicks"),
+    Input(f"btn-apply-tr", "n_clicks"),
+    prevent_initial_call=True,
+)
+def toggle_trends_subtab(n_compare, n_reliability, n_apply):
+    trig = ctx.triggered_id
+    if trig in ("subtab-reliability-btn-tr", "btn-apply-tr"):
+        return (
+            {"display": "none"}, {"display": "block"},
+            "btn-subtab", "btn-subtab active", "reliability",
+        )
+    return (
+        {"display": "block"}, {"display": "none"},
+        "btn-subtab active", "btn-subtab", "compare",
+    )
 
 
 # ── Admin callbacks ───────────────────────────────────────────────────────────
@@ -3077,7 +3849,9 @@ def execute_rollback(_n, upload_id, is_auth, current_version):
 _SECTION_META = {
     "tab-overview": ("region-overview", "Overview"),
     "tab-ex":       ("region-ex",        "Interruption Explorer"),
+    "tab-trends":   ("region-trends", "Trends & Comparison"),
     "tab-admin":    ("region-admin",    "Admin"),
+    
 }
 
 # Card clicks → store-active-tab
@@ -3086,19 +3860,21 @@ _SECTION_META = {
     [
         Input("nav-card-tab-overview", "n_clicks"),
         Input("nav-card-tab-ex",        "n_clicks"),
+        Input("nav-card-tab-trends",    "n_clicks"),
         Input("nav-card-tab-admin",    "n_clicks"),
         Input("back-strip",            "n_clicks"),
     ],
     prevent_initial_call=True,
 )
 
-def _set_active_tab(ov, ex, ad, back):
+def _set_active_tab(ov, ex, tr, ad, back):
     tid = ctx.triggered_id
     if tid == "back-strip":
         return "landing"
     mapping = {
         "nav-card-tab-overview":  "tab-overview",
         "nav-card-tab-ex":        "tab-ex",
+        "nav-card-tab-trends":    "tab-trends",
         "nav-card-tab-admin":     "tab-admin",
     }
     return mapping.get(tid, "landing")
@@ -3107,6 +3883,7 @@ def _set_active_tab(ov, ex, ad, back):
     Output("region-landing",  "style"),
     Output("region-overview", "style"),
     Output("region-ex",        "style"),
+    Output("region-trends", "style"),
     Output("region-admin",    "style"),
     Output("back-strip",      "style"),
     Output("back-strip-section", "children"),
@@ -3126,7 +3903,7 @@ def _route_sections(active):
     }
 
     # defaults
-    land = ov = ex = ad = hidden
+    land = ov = ex = tr = ad = hidden
     back_style   = hidden
     back_label   = ""
     active_tab   = "tab-overview"
@@ -3138,17 +3915,19 @@ def _route_sections(active):
         region_styles = {
             "tab-overview": lambda: setattr(locals(), "ov", visible),
             "tab-ex":       lambda: setattr(locals(), "ex", visible),
+            "tab-trends": lambda: setattr(locals(), "tr",   visible),
             "tab-admin":    lambda: setattr(locals(), "ad", visible),
         }
         # Direct assignment (lambdas above won't work in a closure, use if/elif)
         if   active == "tab-overview": ov = visible
         elif active == "tab-ex":        ex = visible
+        elif active == "tab-trends":    tr = visible
         elif active == "tab-admin":    ad = visible
         back_style = show_back
         back_label = f" {label}"
         active_tab = active
 
-    return land, ov, ex, ad, back_style, back_label, active_tab
+    return land, ov, ex, tr, ad, back_style, back_label, active_tab
 #Landing Page Layout Changes ENDS
 
 # ── Entry point ────────────────────────────────────────────────────────────────
