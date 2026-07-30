@@ -77,7 +77,7 @@ app = Dash(
     suppress_callback_exceptions=True,
 )
 
-from flask import jsonify
+from flask import jsonify, request
 import time
 @app.server.route("/debug/cache-status")
 def cache_status():
@@ -123,7 +123,7 @@ server = app.server
 
 from config import (
     MAX_OVERVIEW_DAYS, MAX_TABLE_ROWS_UI,
-    ADMIN_USERNAME, ADMIN_PASSWORD,
+    BICC_ADMIN_GROUP,
     DB_PATH, DEBUG, HOST, PORT,
     KPI_EVENTS_WARN, KPI_EVENTS_DANGER,
     KPI_AVG_EVENTS_WARN, KPI_AVG_EVENTS_DANGER,
@@ -143,6 +143,17 @@ from config import (
 )
 
 from concurrent.futures import ThreadPoolExecutor  #Threadpool execution of DB Calls
+
+# ── Authentik SSO identity (via outpost-injected headers) ───────────────────
+# The Authentik outpost sits in front of this app and forwards identity as
+# plain request headers on every request. These are only trustworthy because
+# Flask is bound to 127.0.0.1 and unreachable except through the outpost.
+def current_authentik_groups() -> list[str]:
+    raw = request.headers.get("X-authentik-groups", "")
+    return [g.strip() for g in raw.split(",") if g.strip()]
+
+def is_bicc_admin() -> bool:
+    return BICC_ADMIN_GROUP in current_authentik_groups()
 
 #--------------Helpers SAIDI -------------------------------------------
 def resolve_saidi_base(cc, div, stn, fdrs) -> tuple[int, str]:
@@ -1564,26 +1575,12 @@ def build_admin_tab():
                    className="page-subtitle text-muted"),
         ])]),
 
-        # ── Login panel ───────────────────────────────────────────────
+        # ── Access-denied panel (shown when SSO group check fails) ─────
         html.Div(id="admin-login-panel", children=[
             dbc.Card([
                 dbc.CardBody([
-                    html.H6("🔐 Admin Login", className="mb-3"),
-                    dbc.Row([
-                        dbc.Col([
-                            dbc.Input(id="admin-user", placeholder="Username",
-                                      type="text", className="mb-2"),
-                        ], md=4),
-                        dbc.Col([
-                            dbc.Input(id="admin-pass", placeholder="Password",
-                                      type="password", className="mb-2"),
-                        ], md=4),
-                        dbc.Col([
-                            dbc.Button("Login", id="btn-admin-login",
-                                       color="primary", className="mt-0"),
-                        ], md=2, className="d-flex align-items-start"),
-                    ], className="g-2"),
-                    html.Div(id="admin-login-msg", className="mt-2 text-danger small"),
+                    html.H6("🔒 Admin Access Restricted", className="mb-2"),
+                    html.Div(id="admin-login-msg", className="text-muted small"),
                 ])
             ], className="mb-4 shadow-sm"),
         ]),
@@ -3502,18 +3499,17 @@ def toggle_trends_subtab(n_compare, n_reliability, n_apply):
     Output("admin-console",     "style"),
     Output("admin-login-msg",   "children"),
     Output("store-admin-auth",  "data"),
-    Input("btn-admin-login",    "n_clicks"),
-    State("admin-user",         "value"),
-    State("admin-pass",         "value"),
-    State("store-admin-auth",   "data"),
-    prevent_initial_call=True,
+    Input("init-date-interval", "n_intervals"),
 )
-def admin_login(n, username, password, already_auth):
-    if already_auth:
+def admin_access_check(n):
+    if is_bicc_admin():
         return {"display": "none"}, {"display": "block"}, "", True
-    if username == ADMIN_USERNAME and password == ADMIN_PASSWORD:
-        return {"display": "none"}, {"display": "block"}, "", True
-    return no_update, no_update, "❌ Invalid credentials.", False
+    return (
+        {"display": "block"}, {"display": "none"},
+        "You're signed in but not a member of the admin group. "
+        "Contact IT if you believe this is incorrect.",
+        False,
+    )
 
 
 @app.callback(

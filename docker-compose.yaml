@@ -1,0 +1,9 @@
+services:
+  authentik-proxy:
+    image: ghcr.io/goauthentik/proxy:latest
+    network_mode: host
+    environment:
+      AUTHENTIK_HOST: https://34-180-36-71.nip.io
+      AUTHENTIK_TOKEN: XXVQu0XqSphSf9yhMLoqcY3RiY9a7rvTRcN3uwEzsoNBgLRTdt4fRPtm67Ar
+      AUTHENTIK_INSECURE: "false"
+    restart: unless-stopped

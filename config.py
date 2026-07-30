@@ -32,18 +32,12 @@ except ImportError:
 # In production point this to a persistent volume / mounted path.
 DB_PATH: str = os.environ.get("DB_PATH", "bicc.db")
 
-# ── Admin credentials ─────────────────────────────────────────────────────────
+# ── Admin access (via Authentik SSO) ────────────────────────────────────────
 
-# NEVER hard-code these. Set them in .env (local) or App Settings (Azure).
-ADMIN_USERNAME: str = os.environ.get("ADMIN_USERNAME")
-ADMIN_PASSWORD: str = os.environ.get("ADMIN_PASSWORD")
-
-if not ADMIN_USERNAME or not ADMIN_PASSWORD:
-    raise RuntimeError(
-        "ADMIN_USERNAME and ADMIN_PASSWORD must be set via .env or environment "
-        "variables. No default credentials are provided for security reasons. "
-        "Copy .env.example to .env and set real values."
-    )
+# Access to the Admin tab is no longer a local username/password — it's
+# granted automatically to whoever the Authentik outpost identifies as a
+# member of this group (forwarded via the X-authentik-groups header).
+BICC_ADMIN_GROUP: str = os.environ.get("BICC_ADMIN_GROUP", "bescom-super-admins")
 
 # ── UI limits ─────────────────────────────────────────────────────────────────
 
