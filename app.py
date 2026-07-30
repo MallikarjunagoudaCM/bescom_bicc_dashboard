@@ -155,6 +155,13 @@ def current_authentik_groups() -> list[str]:
 def is_bicc_admin() -> bool:
     return BICC_ADMIN_GROUP in current_authentik_groups()
 
+# TEMPORARY — remove once the group-gate is confirmed working end-to-end.
+@app.server.route("/debug/authentik-headers")
+def debug_authentik_headers():
+    return jsonify({
+        k: v for k, v in request.headers.items() if k.lower().startswith("x-authentik")
+    })
+
 #--------------Helpers SAIDI -------------------------------------------
 def resolve_saidi_base(cc, div, stn, fdrs) -> tuple[int, str]:
     """
