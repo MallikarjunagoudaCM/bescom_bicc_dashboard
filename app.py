@@ -150,7 +150,7 @@ from concurrent.futures import ThreadPoolExecutor  #Threadpool execution of DB C
 # Flask is bound to 127.0.0.1 and unreachable except through the outpost.
 def current_authentik_groups() -> list[str]:
     raw = request.headers.get("X-authentik-groups", "")
-    return [g.strip() for g in raw.split(",") if g.strip()]
+    return [g.strip() for g in raw.split("|") if g.strip()]
 
 def is_bicc_admin() -> bool:
     return BICC_ADMIN_GROUP in current_authentik_groups()
