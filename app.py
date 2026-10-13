@@ -155,13 +155,6 @@ def current_authentik_groups() -> list[str]:
 def is_bicc_admin() -> bool:
     return BICC_ADMIN_GROUP in current_authentik_groups()
 
-# TEMPORARY — remove once the group-gate is confirmed working end-to-end.
-@app.server.route("/debug/authentik-headers")
-def debug_authentik_headers():
-    return jsonify({
-        k: v for k, v in request.headers.items() if k.lower().startswith("x-authentik")
-    })
-
 #--------------Helpers SAIDI -------------------------------------------
 def resolve_saidi_base(cc, div, stn, fdrs) -> tuple[int, str]:
     """
@@ -1866,7 +1859,8 @@ def restore_date_picker(_n):
     """On every page load, set the picker to the true current DB bounds.
     Works correctly on cloud (no localStorage dependency)."""
     db_min, db_max = _get_db_date_bounds()
-    return _default_start, _default_end, db_min, db_max
+    start, end = _latest_month_window()
+    return start, end, db_min, db_max
 
 
 @app.callback(
@@ -3254,6 +3248,7 @@ def update_period_comparison(n, cc, div, stn, fdrs, fdrcat, otype, agency,
     Output(f"zone-rank-tr", "children"),
     Output(f"store-trend-tr", "data"),
     Input("btn-apply-tr", "n_clicks"),
+    Input("subtab-reliability-btn-tr", "n_clicks"),
     Input("trend-gran-tr", "value"),
     Input("reliability-view-tr", "value"),
     State("dd-cc-tr", "value"), State("dd-div-tr", "value"), State("dd-stn-tr", "value"),
@@ -3263,7 +3258,7 @@ def update_period_comparison(n, cc, div, stn, fdrs, fdrcat, otype, agency,
     State("store-level-mode", "data"),
     prevent_initial_call=True,
 )
-def update_reliability_trends(n, granularity, view_mode, cc, div, stn, fdrs, fdrcat, otype, agency, date_store, level_mode):
+def update_reliability_trends(n, n_sub, granularity, view_mode, cc, div, stn, fdrs, fdrcat, otype, agency, date_store, level_mode):
     ds = (date_store or {}).get("start")
     de = (date_store or {}).get("end")
     df = get_saidi_saifi_trend(
@@ -3347,6 +3342,7 @@ def update_reliability_trends(n, granularity, view_mode, cc, div, stn, fdrs, fdr
     Output(f"offenders-table-tr", "children"),
     Output(f"store-offenders-tr", "data"),
     Input("btn-apply-tr", "n_clicks"),
+    Input("subtab-reliability-btn-tr", "n_clicks"),
     Input("min-events-tr", "value"),
     Input(f"split-month-tr", "value"),          # NEW
     State("dd-cc-tr", "value"), State("dd-div-tr", "value"), State("dd-stn-tr", "value"),
@@ -3355,7 +3351,7 @@ def update_reliability_trends(n, granularity, view_mode, cc, div, stn, fdrs, fdr
     State("store-level-mode", "data"),
     prevent_initial_call=True,
 )
-def update_repeat_offenders(n, min_events, split_month, cc, div, stn, fdrs, fdrcat, date_store, level_mode):
+def update_repeat_offenders(n, n_sub, min_events, split_month, cc, div, stn, fdrs, fdrcat, date_store, level_mode):
     ds = (date_store or {}).get("start")
     de = (date_store or {}).get("end")
     df = get_repeat_offenders(
