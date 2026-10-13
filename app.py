@@ -635,7 +635,7 @@ def _build_heatmap_fig(df, metric, height=520):
     pivot = pivot.loc[pivot.mean(axis=1).sort_values(ascending=False).index]
 
     # Rounded display text — independent of color-mapping precision
-    text_z = pivot.applymap(lambda v: "" if pd.isna(v) else f"{v:.2f}")
+    text_z = pivot.map(lambda v: "" if pd.isna(v) else f"{v:.2f}")
 
     # Contrast-safe text color per cell: light background -> navy text, dark -> white
     valid = pivot.values[~pd.isna(pivot.values)]
@@ -649,7 +649,7 @@ def _build_heatmap_fig(df, metric, height=520):
         norm = (v - vmin) / vrange
         return "#0a2540" if norm < 0.55 else "#ffffff"  # navy on light half, white on dark half
 
-    font_colors = pivot.applymap(_text_color).values
+    font_colors = pivot.map(_text_color).values
 
     fig.add_trace(go.Heatmap(
         z=pivot.values,
