@@ -4,6 +4,9 @@ __pycache__/
 
 # Data & DB
 *.db
+*.db-shm
+*.db-wal
+*.db-journal
 !assets/*.xlsx
 
 # Env / secrets
