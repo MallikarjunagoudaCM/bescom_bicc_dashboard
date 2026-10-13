@@ -123,7 +123,7 @@ server = app.server
 
 from config import (
     MAX_OVERVIEW_DAYS, MAX_TABLE_ROWS_UI,
-    BICC_ADMIN_GROUP,
+    BICC_ADMIN_GROUPS,
     DB_PATH, DEBUG, HOST, PORT,
     KPI_EVENTS_WARN, KPI_EVENTS_DANGER,
     KPI_AVG_EVENTS_WARN, KPI_AVG_EVENTS_DANGER,
@@ -153,7 +153,7 @@ def current_authentik_groups() -> list[str]:
     return [g.strip() for g in raw.split("|") if g.strip()]
 
 def is_bicc_admin() -> bool:
-    return BICC_ADMIN_GROUP in current_authentik_groups()
+    return any(g in BICC_ADMIN_GROUPS for g in current_authentik_groups())
 
 #--------------Helpers SAIDI -------------------------------------------
 def resolve_saidi_base(cc, div, stn, fdrs) -> tuple[int, str]:

@@ -36,8 +36,13 @@ DB_PATH: str = os.environ.get("DB_PATH", "bicc.db")
 
 # Access to the Admin tab is no longer a local username/password — it's
 # granted automatically to whoever the Authentik outpost identifies as a
-# member of this group (forwarded via the X-authentik-groups header).
-BICC_ADMIN_GROUP: str = os.environ.get("BICC_ADMIN_GROUP", "bescom-super-admins")
+# member of one of these groups (forwarded via the X-authentik-groups header).
+# Comma-separated to allow more than one admin group.
+BICC_ADMIN_GROUPS: list[str] = [
+    g.strip() for g in os.environ.get(
+        "BICC_ADMIN_GROUPS", "bescom-super-admins,bicc_dashboard_admins"
+    ).split(",") if g.strip()
+]
 
 # ── UI limits ─────────────────────────────────────────────────────────────────
 
