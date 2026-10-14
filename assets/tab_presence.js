@@ -53,7 +53,24 @@
     );
     // sendBeacon, not fetch: pagehide gives no guarantee a fetch started
     // there survives long enough to actually reach the network.
-    navigator.sendBeacon('/api/tabs/close', payload);
+    var queued = navigator.sendBeacon('/api/tabs/close', payload);
+    // TEMPORARY DIAGNOSTIC (2026-10-14) — localStorage, not sessionStorage:
+    // this tab is closing, so sessionStorage disappears with it, but
+    // localStorage survives and is readable from a DIFFERENT, freshly
+    // opened tab afterward. `queued` is sendBeacon's own return value —
+    // false means the browser refused to even accept the beacon (a real
+    // client-side failure, e.g. a quota/queue limit); true just means it
+    // was handed off, not that it actually reached the server. Remove
+    // once the "close doesn't reach the server after the dashboard-to-SSO
+    // redirect chain" case is understood.
+    try {
+      localStorage.setItem('bescom_tab_close_debug', JSON.stringify({
+        tabId: tabId,
+        queued: queued,
+        time: new Date().toISOString(),
+        url: window.location.href,
+      }));
+    } catch (e) {}
   }
 
   heartbeat();
