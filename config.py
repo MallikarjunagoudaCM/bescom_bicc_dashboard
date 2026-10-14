@@ -44,6 +44,21 @@ BICC_ADMIN_GROUPS: list[str] = [
     ).split(",") if g.strip()
 ]
 
+# ── SSO portal integration (tab-close logout) ───────────────────────────────
+
+# NOT an SSO/OIDC credential of any kind — this app's identity still comes
+# entirely from the outpost's injected headers, same as BICC_ADMIN_GROUPS
+# above; nothing about login changes. This is a separate, narrower thing:
+# a pre-shared secret for a server-to-server call that lets the SSO portal
+# know when a BICC Dashboard tab opens/closes, so it can count this app's
+# tabs toward "is anyone still using ANY connected app" before ending the
+# shared Authentik session on logout. Same shared secret value already
+# configured for Transfer App — ask whoever manages the SSO portal for the
+# current value. See bescom-custom-authentik-sso's NEW-APP-INTEGRATION.md
+# Section 10 for the full design.
+SSO_PORTAL_API_URL: str = os.environ.get("SSO_PORTAL_API_URL", "https://sso.bescomapps.com/api")
+INTERNAL_SERVICE_TOKEN: str = os.environ.get("INTERNAL_SERVICE_TOKEN", "")
+
 # ── UI limits ─────────────────────────────────────────────────────────────────
 
 # Maximum number of days selectable in the date-range picker (Overview tab).

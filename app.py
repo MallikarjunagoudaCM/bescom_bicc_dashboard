@@ -18,6 +18,7 @@ Run:  python app.py   →  http://localhost:8050
 """
 
 import io, base64, json
+import requests
 from datetime import datetime
 import pandas as pd
 import plotly.graph_objects as go
@@ -138,8 +139,9 @@ from config import (
     KPI_SAIDI_WARN_CC, KPI_SAIDI_DANGER_CC,
     KPI_SAIFI_WARN,     
     KPI_SAIFI_DANGER,   
-    KPI_SAIFI_WARN_CC,  
+    KPI_SAIFI_WARN_CC,
     KPI_SAIFI_DANGER_CC,
+    SSO_PORTAL_API_URL, INTERNAL_SERVICE_TOKEN,  # NEW — tab-close logout
 )
 
 from concurrent.futures import ThreadPoolExecutor  #Threadpool execution of DB Calls
@@ -154,6 +156,63 @@ def current_authentik_groups() -> list[str]:
 
 def is_bicc_admin() -> bool:
     return any(g in BICC_ADMIN_GROUPS for g in current_authentik_groups())
+
+def current_authentik_username() -> str:
+    return request.headers.get("X-authentik-username", "").strip()
+
+# ── Tab-close logout (feeds the SSO portal's shared presence count) ────────
+# NOT a login/logout mechanism of this app's own — identity here still comes
+# entirely from the outpost's injected headers, same as current_authentik_
+# groups() above. These two routes just let assets/tab_presence.js tell the
+# SSO portal "a tab for this user opened/closed," using the same shared
+# secret (INTERNAL_SERVICE_TOKEN) Transfer App already uses for its own
+# equivalent call. See bescom-custom-authentik-sso's NEW-APP-INTEGRATION.md
+# Section 10 for the full design, including why a suppressed close must
+# still be forwarded (not silently dropped) — this app has no login/logout
+# redirects of its own to worry about, so assets/tab_presence.js never sends
+# `suppressed: true` in practice, but the field is handled here anyway in
+# case that ever changes.
+
+@app.server.route("/api/tabs/heartbeat", methods=["POST"])
+def tabs_heartbeat():
+    username = current_authentik_username()
+    if not username:
+        return jsonify({"error": "Not logged in"}), 401
+    data = request.get_json(silent=True) or {}
+    tab_id = data.get("tabId")
+    if not tab_id:
+        return jsonify({"error": "tabId required"}), 400
+    if INTERNAL_SERVICE_TOKEN:
+        try:
+            requests.post(
+                f"{SSO_PORTAL_API_URL}/account/tabs/internal/heartbeat",
+                json={"username": username, "tabId": tab_id},
+                headers={"X-Internal-Token": INTERNAL_SERVICE_TOKEN},
+                timeout=5,
+            )
+        except Exception as e:
+            app.server.logger.error(f"tabs_heartbeat: failed to reach SSO portal: {e}")
+    return jsonify({"ok": True})
+
+@app.server.route("/api/tabs/close", methods=["POST"])
+def tabs_close():
+    username = current_authentik_username()
+    data = request.get_json(silent=True) or {}
+    tab_id = data.get("tabId")
+    suppressed = bool(data.get("suppressed"))
+    if not username or not tab_id:
+        return jsonify({"ok": True})  # sendBeacon — nothing useful to react with either way
+    if INTERNAL_SERVICE_TOKEN:
+        try:
+            requests.post(
+                f"{SSO_PORTAL_API_URL}/account/tabs/internal/close",
+                json={"username": username, "tabId": tab_id, "suppressed": suppressed},
+                headers={"X-Internal-Token": INTERNAL_SERVICE_TOKEN},
+                timeout=5,
+            )
+        except Exception as e:
+            app.server.logger.error(f"tabs_close: failed to reach SSO portal: {e}")
+    return jsonify({"ok": True})
 
 #--------------Helpers SAIDI -------------------------------------------
 def resolve_saidi_base(cc, div, stn, fdrs) -> tuple[int, str]:
