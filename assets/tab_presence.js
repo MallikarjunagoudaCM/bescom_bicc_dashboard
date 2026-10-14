@@ -75,5 +75,18 @@
 
   heartbeat();
   setInterval(heartbeat, HEARTBEAT_MS);
+  // CONFIRMED GAP (2026-10-14), live: pagehide alone didn't fire when the
+  // ENTIRE browser application was closed at once (the only tab/window
+  // open, closed ~30s after loading — far too soon for Chrome's Memory
+  // Saver tab-discarding to be the cause, which was the first theory and
+  // got ruled out). pagehide is reliably specified for closing one tab
+  // while the browser keeps running, but browsers have historically been
+  // less consistent about firing it when the whole application quits at
+  // once. Also listening on the older sibling event `unload` as a
+  // backup — standard cross-browser belt-and-suspenders pattern for
+  // exactly this gap. Safe even if both fire for the same close: sending
+  // the close signal twice is harmless, removing an already-removed
+  // presence entry is a no-op either way.
   window.addEventListener('pagehide', sendCloseBeacon);
+  window.addEventListener('unload', sendCloseBeacon);
 })();
