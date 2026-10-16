@@ -186,7 +186,14 @@ def tabs_heartbeat():
         try:
             requests.post(
                 f"{SSO_PORTAL_API_URL}/account/tabs/internal/heartbeat",
-                json={"username": username, "tabId": tab_id},
+                # "app": ADDED 2026-10-16 — feeds the SSO portal's Active
+                # Sessions admin page's per-app "active in" breakdown (see
+                # that portal's tabPresence.js). BICC Dashboard is
+                # outpost-based (no OIDC-gateway app registration to reuse
+                # a slug from), so 'bicc-dashboard' is just this app's own
+                # name — keep it in sync with
+                # AdminActiveSessions.jsx's APP_DISPLAY_NAMES map.
+                json={"username": username, "tabId": tab_id, "app": "bicc-dashboard"},
                 headers={"X-Internal-Token": INTERNAL_SERVICE_TOKEN},
                 timeout=5,
             )
