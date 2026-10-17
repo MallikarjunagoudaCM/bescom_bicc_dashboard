@@ -221,6 +221,72 @@ def tabs_close():
             app.server.logger.error(f"tabs_close: failed to reach SSO portal: {e}")
     return jsonify({"ok": True})
 
+# ── Idle-timeout enforcement (own-tab-alone case) ───────────────────────────
+# See bescom-custom-authentik-sso's NEW-APP-INTEGRATION.md Section 9 and its
+# own CONFIRMED GAP note (2026-10-17): the SSO portal's idle-timeout logic
+# only runs inside whichever tab's JS is actually mounted — an outpost app
+# like this one, opened alone with the SSO portal's own tab closed, had NO
+# idle enforcement at all, and could stay logged in indefinitely. assets/
+# idle-timeout-watcher.js (vanilla port of the integration kit's own
+# template) handles the client side; these three routes are its backend
+# half — same INTERNAL_SERVICE_TOKEN proxy pattern as the tab-presence
+# routes above, just three different SSO portal endpoints. Unlike those,
+# this app has no local logout/end-session route of its own at all (see the
+# tab-close comment above — identity here is entirely outpost-injected), so
+# /api/auth/end-session is new, not a proxy in front of something that
+# already existed.
+@app.server.route("/api/auth/activity/ping", methods=["POST"])
+def activity_ping():
+    username = current_authentik_username()
+    if not username:
+        return jsonify({"error": "Not logged in"}), 401
+    if INTERNAL_SERVICE_TOKEN:
+        try:
+            requests.post(
+                f"{SSO_PORTAL_API_URL}/account/activity/internal/ping",
+                json={"username": username},
+                headers={"X-Internal-Token": INTERNAL_SERVICE_TOKEN},
+                timeout=5,
+            )
+        except Exception as e:
+            app.server.logger.error(f"activity_ping: failed to reach SSO portal: {e}")
+    return jsonify({"ok": True})
+
+@app.server.route("/api/auth/activity/status", methods=["GET"])
+def activity_status():
+    username = current_authentik_username()
+    if not username:
+        return jsonify({"error": "Not logged in"}), 401
+    if INTERNAL_SERVICE_TOKEN:
+        try:
+            resp = requests.get(
+                f"{SSO_PORTAL_API_URL}/account/activity/internal/status",
+                params={"username": username},
+                headers={"X-Internal-Token": INTERNAL_SERVICE_TOKEN},
+                timeout=5,
+            )
+            return jsonify(resp.json()), resp.status_code
+        except Exception as e:
+            app.server.logger.error(f"activity_status: failed to reach SSO portal: {e}")
+    return jsonify({"lastActivity": None})
+
+@app.server.route("/api/auth/end-session", methods=["POST"])
+def end_session():
+    username = current_authentik_username()
+    if not username:
+        return jsonify({"error": "Not logged in"}), 401
+    if INTERNAL_SERVICE_TOKEN:
+        try:
+            requests.post(
+                f"{SSO_PORTAL_API_URL}/internal/end-session",
+                json={"username": username},
+                headers={"X-Internal-Token": INTERNAL_SERVICE_TOKEN},
+                timeout=10,
+            )
+        except Exception as e:
+            app.server.logger.error(f"end_session: failed to reach SSO portal: {e}")
+    return jsonify({"ok": True})
+
 #--------------Helpers SAIDI -------------------------------------------
 def resolve_saidi_base(cc, div, stn, fdrs) -> tuple[int, str]:
     """
