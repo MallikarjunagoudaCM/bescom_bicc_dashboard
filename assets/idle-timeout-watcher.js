@@ -14,6 +14,9 @@
 //   BescomIdleWatcher.init({
 //     apiBase: '/api',              // -> ${apiBase}/auth/activity/ping, .../status
 //     idleMs: 15 * 60 * 1000,       // optional, defaults to 15 minutes
+//     getToken: function () {       // OPTIONAL — only if your app authenticates
+//       return localStorage.getItem('your_token_key');  // via a Bearer token, not a
+//     },                            // same-origin cookie — see the FIXED note below.
 //     onTimeout: function () {
 //       // MUST perform your app's REAL logout — see the warning below.
 //     },
@@ -37,6 +40,20 @@
 // silently misses its deadline on a backgrounded/minimized tab (browsers
 // throttle or fully suspend timers there), then fires all at once — or
 // shows a stale/wrong countdown — the moment the tab regains focus.
+//
+// FIXED (2026-10-17, same day, found live rolling this out to Contact
+// Directory): the original version only ever sent `credentials: 'include'`
+// (same-origin cookie auth), with no way to send an Authorization header —
+// CONFIRMED LIVE this silently 401'd every ping/status call for an app
+// that authenticates via a Bearer token read from localStorage instead of
+// a cookie (Contact Directory's own admin.html does exactly this for
+// every OTHER API call it makes). The calls still fired (no JS exception,
+// nothing in the console — only visible in the server's own access log as
+// a 401), so this is easy to miss without checking server-side logs, not
+// just "does the request go out at all." The React template already
+// supported this via its own `getToken` prop; this file just never
+// ported that. Pass `getToken` in init() if your app needs it — omit it
+// entirely for an app that authenticates via cookie, exactly as before.
 var BescomIdleWatcher = (function () {
   var WARNING_SECONDS = 10;
   var WARNING_MS = WARNING_SECONDS * 1000;
@@ -91,6 +108,19 @@ var BescomIdleWatcher = (function () {
     var apiBase = options.apiBase || '/api';
     var idleMs = options.idleMs || 15 * 60 * 1000;
     var onTimeout = options.onTimeout || function () {};
+    var getToken = options.getToken || null;
+
+    // See this file's own FIXED (2026-10-17) note above — cookie auth by
+    // default, Bearer-token auth only if the app explicitly opts in via
+    // getToken. A Bearer-auth app with no current token (logged out, or
+    // getToken briefly returns null mid-navigation) skips the call
+    // entirely rather than sending a request guaranteed to 401.
+    function fetchOptions(method) {
+      if (!getToken) return { method: method, credentials: 'include' };
+      var token = getToken();
+      if (!token) return null;
+      return { method: method, headers: { Authorization: 'Bearer ' + token } };
+    }
 
     var dom = buildOverlay();
     var lastKnownActivity = Date.now();
@@ -103,7 +133,9 @@ var BescomIdleWatcher = (function () {
       var now = Date.now();
       if (now - lastPingSent < PING_THROTTLE_MS) return;
       lastPingSent = now;
-      fetch(apiBase + '/auth/activity/ping', { method: 'POST', credentials: 'include' }).catch(function () {});
+      var opts = fetchOptions('POST');
+      if (!opts) return;
+      fetch(apiBase + '/auth/activity/ping', opts).catch(function () {});
     }
 
     function showWarning(secondsLeft) {
@@ -173,7 +205,9 @@ var BescomIdleWatcher = (function () {
     // see NEW-APP-INTEGRATION.md Section 9's own "why per-tab local idle
     // detection alone is wrong".
     setInterval(function () {
-      fetch(apiBase + '/auth/activity/status', { credentials: 'include' })
+      var opts = fetchOptions('GET');
+      if (!opts) return;
+      fetch(apiBase + '/auth/activity/status', opts)
         .then(function (res) { return res.json(); })
         .then(function (data) {
           if (data.lastActivity && data.lastActivity > lastKnownActivity) {
