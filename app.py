@@ -244,7 +244,11 @@ def activity_ping():
         try:
             requests.post(
                 f"{SSO_PORTAL_API_URL}/account/activity/internal/ping",
-                json={"username": username},
+                # "appSlug": ADDED 2026-11-06 — feeds the admin's Live App
+                # Access page's own "last activity app" column; see the
+                # SSO portal's backend/src/routes/activity.js for why this
+                # didn't exist before.
+                json={"username": username, "appSlug": "bicc-dashboard"},
                 headers={"X-Internal-Token": INTERNAL_SERVICE_TOKEN},
                 timeout=5,
             )
